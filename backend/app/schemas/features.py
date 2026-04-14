@@ -1,0 +1,41 @@
+from datetime import date
+
+from pydantic import BaseModel
+
+
+class AnalysisWindow(BaseModel):
+    """Configurable time windows for sea-breeze feature extraction."""
+
+    morning_start: int = 8
+    morning_end: int = 10
+    afternoon_start: int = 11
+    afternoon_end: int = 16
+    reference_hour: int = 9
+    onshore_sector_min: float = 180.0
+    onshore_sector_max: float = 260.0
+    min_morning_hours: int = 2
+    min_afternoon_hours: int = 3
+
+
+class DailyFeatures(BaseModel):
+    """Output feature vector for one location-day."""
+
+    location_id: int
+    date: date
+
+    morning_mean_wind_speed: float | None = None
+    morning_mean_wind_direction: float | None = None
+
+    reference_wind_speed: float | None = None
+    reference_wind_direction: float | None = None
+
+    afternoon_max_wind_speed: float | None = None
+    afternoon_mean_wind_direction: float | None = None
+
+    wind_speed_increase: float | None = None
+    wind_direction_shift: float | None = None
+    onshore_fraction: float | None = None
+
+    hours_available: int = 0
+    morning_hours_used: int = 0
+    afternoon_hours_used: int = 0

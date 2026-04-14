@@ -1,0 +1,134 @@
+"""Feature engineering: convert hourly WeatherRecord rows into daily feature vectors."""
+
+from __future__ import annotations
+
+import math
+from datetime import date
+
+import numpy as np
+
+from app.schemas.features import AnalysisWindow, DailyFeatures
+
+
+def circular_mean(degrees: list[float]) -> float:
+    """Circular mean of angles in degrees, result in [0, 360). Returns NaN if empty."""
+    clean = [d for d in degrees if d is not None and not math.isnan(d)]
+    if not clean:
+        return float("nan")
+    rads = np.deg2rad(clean)
+    mean_sin = np.mean(np.sin(rads))
+    mean_cos = np.mean(np.cos(rads))
+    result = np.rad2deg(np.arctan2(mean_sin, mean_cos)) % 360
+    return float(result)
+
+
+def direction_difference(a: float, b: float) -> float:
+    """Signed angular difference in [-180, +180]."""
+    if a is None or b is None or math.isnan(a) or math.isnan(b):
+        return float("nan")
+    return ((a - b) + 180) % 360 - 180
+
+
+def is_in_sector(direction: float, sector_min: float, sector_max: float) -> bool:
+    """Check if direction falls within [sector_min, sector_max], handling wrap-around."""
+    if direction is None or math.isnan(direction):
+        return False
+    direction = direction % 360
+    sector_min = sector_min % 360
+    sector_max = sector_max % 360
+    if sector_min <= sector_max:
+        return sector_min <= direction <= sector_max
+    # Wrap-around case (e.g. 350 -> 10)
+    return direction >= sector_min or direction <= sector_max
+
+
+def compute_daily_features(
+    records,
+    location_id: int,
+    target_date: date,
+    window: AnalysisWindow | None = None,
+) -> DailyFeatures:
+    """Compute daily feature vector from hourly weather records.
+
+    ``records`` must be an iterable of objects with attributes:
+    ``.valid_time_local``, ``.true_wind_speed``, ``.true_wind_direction``.
+    """
+    if window is None:
+        window = AnalysisWindow()
+
+    morning_speeds: list[float] = []
+    morning_dirs: list[float] = []
+    afternoon_speeds: list[float] = []
+    afternoon_dirs: list[float] = []
+    reference_speed: float | None = None
+    reference_dir: float | None = None
+
+    for rec in records:
+        hour = rec.valid_time_local.hour
+        speed = rec.true_wind_speed
+        direction = rec.true_wind_direction
+
+        # Reference hour
+        if hour == window.reference_hour:
+            if speed is not None:
+                reference_speed = speed
+            if direction is not None:
+                reference_dir = direction
+
+        # Morning window (inclusive)
+        if window.morning_start <= hour <= window.morning_end:
+            if speed is not None:
+                morning_speeds.append(speed)
+            if direction is not None:
+                morning_dirs.append(direction)
+
+        # Afternoon window (inclusive)
+        if window.afternoon_start <= hour <= window.afternoon_end:
+            if speed is not None:
+                afternoon_speeds.append(speed)
+            if direction is not None:
+                afternoon_dirs.append(direction)
+
+    hours_available = len(morning_speeds) + len(afternoon_speeds)
+    morning_hours_used = len(morning_speeds)
+    afternoon_hours_used = len(afternoon_speeds)
+
+    features = DailyFeatures(
+        location_id=location_id,
+        date=target_date,
+        hours_available=hours_available,
+        morning_hours_used=morning_hours_used,
+        afternoon_hours_used=afternoon_hours_used,
+        reference_wind_speed=reference_speed,
+        reference_wind_direction=reference_dir,
+    )
+
+    # Morning aggregates
+    if morning_hours_used >= window.min_morning_hours:
+        features.morning_mean_wind_speed = float(np.mean(morning_speeds))
+        features.morning_mean_wind_direction = circular_mean(morning_dirs)
+
+    # Afternoon aggregates
+    if afternoon_hours_used >= window.min_afternoon_hours:
+        features.afternoon_max_wind_speed = float(np.max(afternoon_speeds))
+        features.afternoon_mean_wind_direction = circular_mean(afternoon_dirs)
+
+    # Derived features (require both windows)
+    if features.morning_mean_wind_speed is not None and features.afternoon_max_wind_speed is not None:
+        features.wind_speed_increase = features.afternoon_max_wind_speed - features.morning_mean_wind_speed
+
+    if features.morning_mean_wind_direction is not None and features.afternoon_mean_wind_direction is not None:
+        morning_dir = features.morning_mean_wind_direction
+        afternoon_dir = features.afternoon_mean_wind_direction
+        if not math.isnan(morning_dir) and not math.isnan(afternoon_dir):
+            features.wind_direction_shift = direction_difference(afternoon_dir, morning_dir)
+
+    # Onshore fraction
+    if afternoon_hours_used >= window.min_afternoon_hours:
+        onshore_count = sum(
+            1 for d in afternoon_dirs
+            if is_in_sector(d, window.onshore_sector_min, window.onshore_sector_max)
+        )
+        features.onshore_fraction = onshore_count / len(afternoon_dirs) if afternoon_dirs else 0.0
+
+    return features
