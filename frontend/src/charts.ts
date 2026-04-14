@@ -44,9 +44,10 @@ export function renderWindOverlayChart(
   windOverlayChart.setOption({
     title: source
       ? {
-          subtext: `Source: ${source}`,
-          subtextStyle: { fontSize: 11, color: "#868e96" },
+          text: `Source: ${source}`,
+          textStyle: { fontSize: 11, fontWeight: "normal", color: "#868e96" },
           left: "center",
+          top: 0,
         }
       : undefined,
     tooltip: {
@@ -72,8 +73,8 @@ export function renderWindOverlayChart(
         return html;
       },
     },
-    legend: { top: source ? 25 : 0, left: "center" },
-    grid: { left: 50, right: 65, top: source ? 60 : 40, bottom: 50 },
+    legend: { top: source ? 18 : 0, left: "center" },
+    grid: { left: 50, right: 65, top: source ? 50 : 30, bottom: 50 },
     xAxis: {
       type: "category",
       data: times,
@@ -148,12 +149,25 @@ export function renderTempPressureChart(
   const temps = records.map((r) => r.temperature);
   const pressures = records.map((r) => r.pressure);
 
+  // Compute tight range for pressure axis so small variations are visible
+  const validPressures = pressures.filter((p): p is number => p != null);
+  let pMin: number | undefined;
+  let pMax: number | undefined;
+  if (validPressures.length > 0) {
+    const dataMin = Math.min(...validPressures);
+    const dataMax = Math.max(...validPressures);
+    const pad = Math.max((dataMax - dataMin) * 0.5, 2);
+    pMin = Math.floor(dataMin - pad);
+    pMax = Math.ceil(dataMax + pad);
+  }
+
   tempPressureChart.setOption({
     title: source
       ? {
-          subtext: `Source: ${source}`,
-          subtextStyle: { fontSize: 11, color: "#868e96" },
+          text: `Source: ${source}`,
+          textStyle: { fontSize: 11, fontWeight: "normal", color: "#868e96" },
           left: "center",
+          top: 0,
         }
       : undefined,
     tooltip: {
@@ -179,8 +193,8 @@ export function renderTempPressureChart(
         return html;
       },
     },
-    legend: { top: source ? 25 : 0, left: "center" },
-    grid: { left: 50, right: 65, top: source ? 60 : 40, bottom: 50 },
+    legend: { top: source ? 18 : 0, left: "center" },
+    grid: { left: 50, right: 65, top: source ? 50 : 30, bottom: 50 },
     xAxis: {
       type: "category",
       data: times,
@@ -198,6 +212,8 @@ export function renderTempPressureChart(
         name: "hPa",
         nameLocation: "middle",
         nameGap: 45,
+        min: pMin,
+        max: pMax,
       },
     ],
     dataZoom: [{ type: "inside" }],
