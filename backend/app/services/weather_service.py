@@ -72,6 +72,11 @@ def _upsert_records(
 ) -> int:
     if not records:
         return 0
+
+    # Check if any records carry model_run_time (i.e. GFS forecast data).
+    # If so, use on_conflict_do_update so newer model runs replace stale rows.
+    has_model_run = any(r.model_run_time is not None for r in records)
+
     rows = [
         {
             "location_id": location_id,
@@ -95,13 +100,27 @@ def _upsert_records(
     batch_size = 4000
     for i in range(0, len(rows), batch_size):
         batch = rows[i : i + batch_size]
-        stmt = (
-            insert(WeatherRecord)
-            .values(batch)
-            .on_conflict_do_nothing(
+        stmt = insert(WeatherRecord).values(batch)
+        if has_model_run:
+            # Replace weather values when a newer model run arrives for the
+            # same valid time, so forecasts stay current.
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["location_id", "source", "valid_time_utc"],
+                set_={
+                    "true_wind_speed": stmt.excluded.true_wind_speed,
+                    "true_wind_direction": stmt.excluded.true_wind_direction,
+                    "temperature": stmt.excluded.temperature,
+                    "pressure": stmt.excluded.pressure,
+                    "cloud_cover": stmt.excluded.cloud_cover,
+                    "model_run_time": stmt.excluded.model_run_time,
+                    "forecast_hour": stmt.excluded.forecast_hour,
+                    "model_name": stmt.excluded.model_name,
+                },
+            )
+        else:
+            stmt = stmt.on_conflict_do_nothing(
                 index_elements=["location_id", "source", "valid_time_utc"]
             )
-        )
         db.execute(stmt)
     db.commit()
     return len(records)
@@ -132,6 +151,43 @@ def _count_existing(
     return count or 0
 
 
+def _gfs_cache_is_fresh(
+    db: Session, location: Location, start: date, end: date
+) -> bool:
+    """Check whether cached GFS records use the latest available model run.
+
+    Queries the most recent model_run_time stored for source='gfs' in the
+    date range and compares it to the current latest available GFS cycle.
+    Returns False (stale) if a newer cycle is available.
+    """
+    from app.services.gfs_forecast_provider import _latest_available_cycle
+
+    tz = ZoneInfo(location.timezone)
+    start_dt = datetime.combine(start, time.min, tzinfo=tz)
+    end_dt = datetime.combine(end, time(23, 59, 59), tzinfo=tz)
+    start_utc = start_dt.astimezone(ZoneInfo("UTC"))
+    end_utc = end_dt.astimezone(ZoneInfo("UTC"))
+
+    stored_mrt = db.execute(
+        select(func.max(WeatherRecord.model_run_time))
+        .where(
+            WeatherRecord.location_id == location.id,
+            WeatherRecord.source == "gfs",
+            WeatherRecord.valid_time_utc >= start_utc,
+            WeatherRecord.valid_time_utc <= end_utc,
+        )
+    ).scalar()
+
+    if stored_mrt is None:
+        return False  # no records at all
+
+    now_utc = datetime.now(tz=ZoneInfo("UTC"))
+    latest_run, _ = _latest_available_cycle(now_utc)
+
+    # Fresh if the stored model run is the same as (or newer than) the latest
+    return stored_mrt >= latest_run
+
+
 def fetch_weather(
     db: Session,
     provider: WeatherProvider,
@@ -149,8 +205,18 @@ def fetch_weather(
     # Tier 1: Check Postgres
     existing = _count_existing(db, location.id, source, start_date, end_date)
     if existing >= expected * 0.9:
-        logger.info("Postgres cache hit: %d records for %s", existing, location.name)
-        return existing, True
+        # For GFS, also verify the cached data is from the latest model run.
+        if source == "gfs":
+            if not _gfs_cache_is_fresh(db, location, start_date, end_date):
+                logger.info(
+                    "Postgres GFS records stale for %s, re-fetching", location.name
+                )
+            else:
+                logger.info("Postgres cache hit: %d records for %s", existing, location.name)
+                return existing, True
+        else:
+            logger.info("Postgres cache hit: %d records for %s", existing, location.name)
+            return existing, True
 
     # Tier 2: Check filesystem cache (only for Open-Meteo JSON sources)
     if source in _OPEN_METEO_JSON_SOURCES:
