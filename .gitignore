@@ -13,6 +13,9 @@ node_modules/
 # Data
 data/
 
+# Claude Code
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db

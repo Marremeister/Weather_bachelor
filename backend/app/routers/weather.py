@@ -2,7 +2,6 @@ from datetime import date, datetime, time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from zoneinfo import ZoneInfo
 
 from app.database import get_db
 from app.models.location import Location
@@ -52,9 +51,8 @@ def get_weather_records(
     if location is None:
         raise HTTPException(status_code=404, detail="Location not found")
 
-    tz = ZoneInfo(location.timezone)
-    start_dt = datetime.combine(start_date, time.min, tzinfo=tz)
-    end_dt = datetime.combine(end_date, time(23, 59, 59), tzinfo=tz)
+    start_dt = datetime.combine(start_date, time.min)
+    end_dt = datetime.combine(end_date, time(23, 59, 59))
 
     records = (
         db.query(WeatherRecord)

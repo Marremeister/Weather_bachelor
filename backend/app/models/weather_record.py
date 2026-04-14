@@ -18,7 +18,7 @@ class WeatherRecord(Base):
     location_id: Mapped[int] = mapped_column(Integer, ForeignKey("locations.id"))
     source: Mapped[str] = mapped_column(String(63))
     valid_time_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    valid_time_local: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    valid_time_local: Mapped[datetime] = mapped_column(DateTime(timezone=False))
     true_wind_speed: Mapped[float | None] = mapped_column(Float, nullable=True)
     true_wind_direction: Mapped[float | None] = mapped_column(Float, nullable=True)
     temperature: Mapped[float | None] = mapped_column(Float, nullable=True)

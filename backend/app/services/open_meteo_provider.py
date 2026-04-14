@@ -22,7 +22,7 @@ def parse_open_meteo_response(data: dict, timezone: str) -> list[HourlyRecord]:
         records.append(
             HourlyRecord(
                 valid_time_utc=utc_dt,
-                valid_time_local=local_dt,
+                valid_time_local=local_dt.replace(tzinfo=None),
                 true_wind_speed=hourly.get("wind_speed_10m", [None] * len(times))[i],
                 true_wind_direction=hourly.get("wind_direction_10m", [None] * len(times))[i],
                 temperature=hourly.get("temperature_2m", [None] * len(times))[i],
