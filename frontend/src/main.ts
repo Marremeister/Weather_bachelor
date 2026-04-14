@@ -237,7 +237,8 @@ historyList.addEventListener("click", async (e) => {
 
   try {
     const analysisRun = await getAnalysisRun(runId);
-    const weatherRecords = await getWeatherRecords(locationId, targetDate, targetDate);
+    const chartSource = analysisRun.forecast_source ?? analysisRun.historical_source ?? undefined;
+    const weatherRecords = await getWeatherRecords(locationId, targetDate, targetDate, chartSource);
 
     currentRunId = runId;
     currentTargetDate = targetDate;
@@ -245,7 +246,7 @@ historyList.addEventListener("click", async (e) => {
     renderSummaryPanel(summaryPanel, analysisRun);
     summarySection.hidden = false;
 
-    const histSource = weatherRecords[0]?.source;
+    const histSource = chartSource ?? weatherRecords[0]?.source;
     if (weatherRecords.length > 0) {
       chartsSection.hidden = false;
       renderWindSpeedChart(speedChartEl, weatherRecords, histSource);
@@ -296,8 +297,9 @@ analysisForm.addEventListener("submit", async (e) => {
       forecast_source: currentMode === "forecast" ? "gfs" : undefined,
       historical_source: currentMode === "forecast" ? "era5" : undefined,
     });
+    const chartSource = analysisRun.forecast_source ?? analysisRun.historical_source ?? undefined;
     const weatherRecords = await getWeatherRecords(
-      locationId, targetDateInput.value, targetDateInput.value,
+      locationId, targetDateInput.value, targetDateInput.value, chartSource,
     );
 
     currentRunId = analysisRun.id;
@@ -308,7 +310,7 @@ analysisForm.addEventListener("submit", async (e) => {
     summarySection.hidden = false;
 
     // Charts
-    const source = weatherRecords[0]?.source;
+    const source = chartSource ?? weatherRecords[0]?.source;
     if (weatherRecords.length > 0) {
       chartsSection.hidden = false;
       renderWindSpeedChart(speedChartEl, weatherRecords, source);

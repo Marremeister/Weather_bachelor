@@ -44,6 +44,7 @@ def get_weather_records(
     location_id: int = Query(...),
     start_date: date = Query(...),
     end_date: date = Query(...),
+    source: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
     location = db.get(Location, location_id)
@@ -53,14 +54,13 @@ def get_weather_records(
     start_dt = datetime.combine(start_date, time.min)
     end_dt = datetime.combine(end_date, time(23, 59, 59))
 
-    records = (
-        db.query(WeatherRecord)
-        .filter(
-            WeatherRecord.location_id == location_id,
-            WeatherRecord.valid_time_local >= start_dt,
-            WeatherRecord.valid_time_local <= end_dt,
-        )
-        .order_by(WeatherRecord.valid_time_utc)
-        .all()
+    query = db.query(WeatherRecord).filter(
+        WeatherRecord.location_id == location_id,
+        WeatherRecord.valid_time_local >= start_dt,
+        WeatherRecord.valid_time_local <= end_dt,
     )
+    if source is not None:
+        query = query.filter(WeatherRecord.source == source)
+
+    records = query.order_by(WeatherRecord.valid_time_utc).all()
     return records

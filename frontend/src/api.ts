@@ -40,12 +40,16 @@ export async function getWeatherRecords(
   locationId: number,
   startDate: string,
   endDate: string,
+  source?: string,
 ): Promise<WeatherRecord[]> {
   const params = new URLSearchParams({
     location_id: String(locationId),
     start_date: startDate,
     end_date: endDate,
   });
+  if (source) {
+    params.set("source", source);
+  }
   const res = await fetch(`/api/weather?${params}`);
   if (!res.ok) {
     throw new Error(`Weather records fetch failed: ${res.status}`);
