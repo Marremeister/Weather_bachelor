@@ -1,0 +1,56 @@
+"""Schemas for analog matching analysis."""
+
+from datetime import date, datetime
+
+from pydantic import BaseModel, Field
+
+
+class AnalysisRequest(BaseModel):
+    location_id: int
+    target_date: date
+    historical_start_date: date
+    historical_end_date: date
+    top_n: int = Field(default=10, ge=1, le=50)
+
+
+class AnalogCandidate(BaseModel):
+    """Internal value object produced by the ranking pipeline."""
+
+    date: date
+    rank: int
+    distance: float
+    similarity_score: float
+    features: dict[str, float | None]
+
+
+class AnalogResultResponse(BaseModel):
+    id: int
+    analysis_run_id: int
+    analog_date: date
+    rank: int
+    similarity_score: float | None
+    distance: float | None
+    summary: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AnalysisRunResponse(BaseModel):
+    id: int
+    location_id: int
+    target_date: date
+    status: str
+    started_at: datetime | None
+    finished_at: datetime | None
+    summary: str | None
+    historical_start_date: date | None
+    historical_end_date: date | None
+    top_n: int | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AnalysisRunDetailResponse(AnalysisRunResponse):
+    analogs: list[AnalogResultResponse] = []
