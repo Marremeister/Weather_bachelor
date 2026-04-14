@@ -266,3 +266,29 @@ class TestComputeDailyFeatures:
         # 3 out of 4 afternoon directions in [180, 260]
         assert features.onshore_fraction is not None
         assert abs(features.onshore_fraction - 0.75) < 0.01
+
+    def test_speeds_without_directions(self):
+        """Speed present but all directions None → direction fields stay None."""
+        records = [
+            _rec(8, 3.0, None),
+            _rec(9, 4.0, None),
+            _rec(10, 3.5, None),
+            _rec(11, 7.0, None),
+            _rec(12, 8.0, None),
+            _rec(13, 9.0, None),
+        ]
+        features = compute_daily_features(records, location_id=1, target_date=date(2024, 7, 15))
+
+        # Speed features should still be computed
+        assert features.morning_hours_used == 3
+        assert features.afternoon_hours_used == 3
+        assert features.morning_mean_wind_speed is not None
+        assert abs(features.morning_mean_wind_speed - 3.5) < 0.01
+        assert features.afternoon_max_wind_speed == 9.0
+        assert features.wind_speed_increase is not None
+
+        # Direction features must be None, not NaN or 0.0
+        assert features.morning_mean_wind_direction is None
+        assert features.afternoon_mean_wind_direction is None
+        assert features.wind_direction_shift is None
+        assert features.onshore_fraction is None

@@ -103,14 +103,19 @@ def compute_daily_features(
         reference_wind_direction=reference_dir,
     )
 
-    # Morning aggregates
+    morning_dir_count = len(morning_dirs)
+    afternoon_dir_count = len(afternoon_dirs)
+
+    # Morning aggregates — speed and direction gated independently
     if morning_hours_used >= window.min_morning_hours:
         features.morning_mean_wind_speed = float(np.mean(morning_speeds))
+    if morning_dir_count >= window.min_morning_hours:
         features.morning_mean_wind_direction = circular_mean(morning_dirs)
 
-    # Afternoon aggregates
+    # Afternoon aggregates — speed and direction gated independently
     if afternoon_hours_used >= window.min_afternoon_hours:
         features.afternoon_max_wind_speed = float(np.max(afternoon_speeds))
+    if afternoon_dir_count >= window.min_afternoon_hours:
         features.afternoon_mean_wind_direction = circular_mean(afternoon_dirs)
 
     # Derived features (require both windows)
@@ -123,12 +128,12 @@ def compute_daily_features(
         if not math.isnan(morning_dir) and not math.isnan(afternoon_dir):
             features.wind_direction_shift = direction_difference(afternoon_dir, morning_dir)
 
-    # Onshore fraction
-    if afternoon_hours_used >= window.min_afternoon_hours:
+    # Onshore fraction — only when enough direction samples exist
+    if afternoon_dir_count >= window.min_afternoon_hours:
         onshore_count = sum(
             1 for d in afternoon_dirs
             if is_in_sector(d, window.onshore_sector_min, window.onshore_sector_max)
         )
-        features.onshore_fraction = onshore_count / len(afternoon_dirs) if afternoon_dirs else 0.0
+        features.onshore_fraction = onshore_count / afternoon_dir_count
 
     return features
