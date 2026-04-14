@@ -1,4 +1,4 @@
-import type { AnalogResult, AnalysisRunDetail, WeatherRecord } from "./types";
+import type { AnalogResult, AnalysisRunDetail, BiasCorrection, LibraryStatusResponse, WeatherRecord } from "./types";
 
 export function renderSummaryPanel(
   container: HTMLElement,
@@ -154,6 +154,140 @@ export function renderAnalogTable(
           <td class="num">${similarity}</td>
           <td class="num">${distance}</td>
           <td>${a.summary ? escapeHtml(a.summary) : "—"}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  container.innerHTML = `${headerRow}<tbody>${bodyRows}</tbody>`;
+}
+
+// --- Quality Indicators ---
+
+export function renderQualityIndicators(
+  container: HTMLElement,
+  run: AnalysisRunDetail,
+  records: WeatherRecord[],
+  libraryStatus: LibraryStatusResponse | null,
+): void {
+  const items: string[] = [];
+  const mode = run.mode ?? "historical";
+
+  // Model Init Time (forecast only)
+  const modelRunTime = records.find((r) => r.model_run_time)?.model_run_time ?? null;
+  if (mode === "forecast" && modelRunTime) {
+    const d = new Date(modelRunTime);
+    const label = d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    items.push(`
+      <div class="summary-item">
+        <span class="label">Model Init</span>
+        <span class="value"><span class="quality-badge neutral">${escapeHtml(label)}</span></span>
+      </div>
+    `);
+  }
+
+  // Data Freshness
+  const refTime = mode === "forecast" && modelRunTime
+    ? new Date(modelRunTime)
+    : run.finished_at
+      ? new Date(run.finished_at)
+      : null;
+  if (refTime) {
+    const hoursAgo = Math.round((Date.now() - refTime.getTime()) / 3_600_000);
+    const badgeClass = hoursAgo <= 6 ? "good" : hoursAgo <= 12 ? "warning" : "bad";
+    items.push(`
+      <div class="summary-item">
+        <span class="label">Data Freshness</span>
+        <span class="value"><span class="quality-badge ${badgeClass}">${hoursAgo}h ago</span></span>
+      </div>
+    `);
+  }
+
+  // Hourly Coverage
+  const source = records[0]?.source ?? run.forecast_source ?? run.historical_source ?? "open_meteo";
+  const expected = source === "gfs" ? 9 : 24;
+  const actual = records.length;
+  const missing = Math.max(0, expected - actual);
+  const coverageClass = missing === 0 ? "good" : missing <= 3 ? "warning" : "bad";
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Hourly Coverage</span>
+      <span class="value"><span class="quality-badge ${coverageClass}">${actual}/${expected} hours${missing > 0 ? ` (${missing} missing)` : ""}</span></span>
+    </div>
+  `);
+
+  // Library Coverage
+  if (libraryStatus && libraryStatus.status !== "no_build" && libraryStatus.total_chunks != null) {
+    const completed = libraryStatus.completed_chunks ?? 0;
+    const total = libraryStatus.total_chunks;
+    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const libClass = pct >= 100 ? "good" : pct >= 50 ? "warning" : "bad";
+    items.push(`
+      <div class="summary-item">
+        <span class="label">Library Coverage</span>
+        <span class="value"><span class="quality-badge ${libClass}">${completed}/${total} chunks (${pct}%)</span></span>
+      </div>
+    `);
+  } else {
+    items.push(`
+      <div class="summary-item">
+        <span class="label">Library Coverage</span>
+        <span class="value"><span class="quality-badge neutral">No library built</span></span>
+      </div>
+    `);
+  }
+
+  container.innerHTML = items.join("");
+}
+
+// --- Bias Table ---
+
+const BIAS_FEATURE_LABELS: Record<string, string> = {
+  morning_wind_speed: "Morning Wind Speed",
+  afternoon_wind_speed: "Afternoon Wind Speed",
+  morning_wind_direction: "Morning Wind Direction",
+  afternoon_wind_direction: "Afternoon Wind Direction",
+  direction_shift: "Direction Shift",
+  speed_increase: "Speed Increase",
+  temperature_morning: "Morning Temperature",
+  temperature_afternoon: "Afternoon Temperature",
+  pressure_morning: "Morning Pressure",
+};
+
+export function renderBiasTable(
+  container: HTMLElement,
+  corrections: BiasCorrection[],
+): void {
+  if (corrections.length === 0) {
+    container.innerHTML = `<thead><tr><th colspan="6">No bias corrections available</th></tr></thead>`;
+    return;
+  }
+
+  const headerRow = `
+    <thead>
+      <tr>
+        <th>Feature</th>
+        <th>Source Pair</th>
+        <th class="num">Mean Bias</th>
+        <th class="num">&plusmn; Std</th>
+        <th class="num">Samples</th>
+        <th>Calibration Period</th>
+      </tr>
+    </thead>
+  `;
+
+  const bodyRows = corrections
+    .map((c) => {
+      const featureLabel = BIAS_FEATURE_LABELS[c.feature_name] ?? c.feature_name;
+      const pair = `${escapeHtml(c.forecast_source)} vs ${escapeHtml(c.historical_source)}`;
+      return `
+        <tr>
+          <td>${escapeHtml(featureLabel)}</td>
+          <td>${pair}</td>
+          <td class="num">${c.bias_mean.toFixed(3)}</td>
+          <td class="num">${c.bias_std.toFixed(3)}</td>
+          <td class="num">${c.sample_count}</td>
+          <td>${escapeHtml(c.calibration_start)} to ${escapeHtml(c.calibration_end)}</td>
         </tr>
       `;
     })

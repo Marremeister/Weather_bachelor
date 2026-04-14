@@ -3,15 +3,19 @@ import {
   fetchHealth,
   fetchLocations,
   getAnalysisRun,
+  getBiasReport,
+  getLibraryStatus,
   getWeatherRecords,
   listAnalysisRuns,
   runAnalysis,
 } from "./api";
-import { renderWindOverlayChart, renderTempPressureChart } from "./charts";
+import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart } from "./charts";
 import {
   renderSummaryPanel,
   renderHourlyTable,
   renderAnalogTable,
+  renderQualityIndicators,
+  renderBiasTable,
 } from "./dashboard";
 import {
   downloadWeatherCsv,
@@ -19,8 +23,11 @@ import {
   downloadAnalysisJson,
   downloadWindOverlayChart,
   downloadTempPressureChart,
+  downloadMorningWindRoseChart,
+  downloadAfternoonWindRoseChart,
+  downloadBiasChart,
 } from "./export";
-import type { Location, SeaBreezeClassification } from "./types";
+import type { AnalysisRunDetail, Location, SeaBreezeClassification, WeatherRecord } from "./types";
 import "./styles.css";
 
 // --- DOM refs ---
@@ -44,12 +51,28 @@ const hourlyTable = document.getElementById("hourly-table")!;
 const analogSection = document.getElementById("analog-section")!;
 const analogTable = document.getElementById("analog-table")!;
 
+// Wind rose
+const windroseSection = document.getElementById("windrose-section")!;
+const morningWindroseEl = document.getElementById("morning-windrose-chart")!;
+const afternoonWindroseEl = document.getElementById("afternoon-windrose-chart")!;
+
+// Bias / Quality
+const biasQualitySection = document.getElementById("bias-quality-section")!;
+const qualityIndicators = document.getElementById("quality-indicators")!;
+const biasChartWrapper = document.getElementById("bias-chart-wrapper")!;
+const biasChartEl = document.getElementById("bias-chart")!;
+const biasTableEl = document.getElementById("bias-table")!;
+const biasNoData = document.getElementById("bias-no-data")!;
+const exportBiasPngBtn = document.getElementById("export-bias-png-btn") as HTMLButtonElement;
+
 // Export buttons
 const exportJsonBtn = document.getElementById("export-json-btn") as HTMLButtonElement;
 const exportWindPngBtn = document.getElementById("export-wind-png-btn") as HTMLButtonElement;
 const exportTempPressPngBtn = document.getElementById("export-temp-press-png-btn") as HTMLButtonElement;
 const exportWeatherCsvBtn = document.getElementById("export-weather-csv-btn") as HTMLButtonElement;
 const exportAnalogsCsvBtn = document.getElementById("export-analogs-csv-btn") as HTMLButtonElement;
+const exportMorningWrPngBtn = document.getElementById("export-morning-wr-png-btn") as HTMLButtonElement;
+const exportAfternoonWrPngBtn = document.getElementById("export-afternoon-wr-png-btn") as HTMLButtonElement;
 
 // History
 const historyList = document.getElementById("history-list")!;
@@ -251,6 +274,9 @@ historyList.addEventListener("click", async (e) => {
       chartsSection.hidden = false;
       renderWindOverlayChart(windOverlayEl, weatherRecords, histSource);
       renderTempPressureChart(tempPressureEl, weatherRecords, histSource);
+
+      windroseSection.hidden = false;
+      renderDualWindRose(morningWindroseEl, afternoonWindroseEl, weatherRecords, histSource);
     }
 
     renderHourlyTable(hourlyTable, weatherRecords);
@@ -258,6 +284,8 @@ historyList.addEventListener("click", async (e) => {
 
     renderAnalogTable(analogTable, analysisRun.analogs);
     analogSection.hidden = false;
+
+    renderBiasQualityPanel(locationId, analysisRun, weatherRecords);
   } catch (err) {
     showError(err instanceof Error ? err.message : "Failed to load run.");
   } finally {
@@ -315,6 +343,9 @@ analysisForm.addEventListener("submit", async (e) => {
       chartsSection.hidden = false;
       renderWindOverlayChart(windOverlayEl, weatherRecords, source);
       renderTempPressureChart(tempPressureEl, weatherRecords, source);
+
+      windroseSection.hidden = false;
+      renderDualWindRose(morningWindroseEl, afternoonWindroseEl, weatherRecords, source);
     }
 
     // Hourly table
@@ -324,6 +355,9 @@ analysisForm.addEventListener("submit", async (e) => {
     // Analog table
     renderAnalogTable(analogTable, analysisRun.analogs);
     analogSection.hidden = false;
+
+    // Bias / Quality panel
+    renderBiasQualityPanel(locationId, analysisRun, weatherRecords);
 
     // Refresh history to include this new run
     loadHistory();
@@ -360,6 +394,46 @@ exportWeatherCsvBtn.addEventListener("click", () => {
 
 exportAnalogsCsvBtn.addEventListener("click", () => {
   if (currentRunId != null) downloadAnalogsCsv(currentRunId, currentTargetDate);
+});
+
+exportMorningWrPngBtn.addEventListener("click", () => {
+  downloadMorningWindRoseChart(currentTargetDate);
+});
+
+exportAfternoonWrPngBtn.addEventListener("click", () => {
+  downloadAfternoonWindRoseChart(currentTargetDate);
+});
+
+// --- Bias / Quality panel ---
+
+async function renderBiasQualityPanel(
+  locationId: number,
+  run: AnalysisRunDetail,
+  records: WeatherRecord[],
+): Promise<void> {
+  const [biasReport, libraryStatus] = await Promise.all([
+    getBiasReport(locationId).catch(() => null),
+    getLibraryStatus(locationId).catch(() => null),
+  ]);
+
+  renderQualityIndicators(qualityIndicators, run, records, libraryStatus);
+
+  const corrections = biasReport?.corrections ?? [];
+  if (corrections.length > 0) {
+    biasChartWrapper.hidden = false;
+    biasNoData.hidden = true;
+    renderBiasChart(biasChartEl, corrections);
+    renderBiasTable(biasTableEl, corrections);
+  } else {
+    biasChartWrapper.hidden = true;
+    biasNoData.hidden = false;
+  }
+
+  biasQualitySection.hidden = false;
+}
+
+exportBiasPngBtn.addEventListener("click", () => {
+  downloadBiasChart(currentTargetDate);
 });
 
 // --- Legacy classification ---

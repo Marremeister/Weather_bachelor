@@ -1,4 +1,10 @@
-import { getWindOverlayChart, getTempPressureChart } from "./charts";
+import {
+  getWindOverlayChart,
+  getTempPressureChart,
+  getMorningWindRoseChart,
+  getAfternoonWindRoseChart,
+  getBiasChart,
+} from "./charts";
 
 function triggerDownload(url: string, filename: string): void {
   const a = document.createElement("a");
@@ -42,4 +48,25 @@ export function downloadTempPressureChart(targetDate: string): void {
   if (!chart) return;
   const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
   triggerDownload(url, `temp_pressure_${targetDate}.png`);
+}
+
+export function downloadMorningWindRoseChart(targetDate: string): void {
+  const chart = getMorningWindRoseChart();
+  if (!chart) return;
+  const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
+  triggerDownload(url, `morning_windrose_${targetDate}.png`);
+}
+
+export function downloadAfternoonWindRoseChart(targetDate: string): void {
+  const chart = getAfternoonWindRoseChart();
+  if (!chart) return;
+  const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
+  triggerDownload(url, `afternoon_windrose_${targetDate}.png`);
+}
+
+export function downloadBiasChart(targetDate: string): void {
+  const chart = getBiasChart();
+  if (!chart) return;
+  const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
+  triggerDownload(url, `bias_chart_${targetDate}.png`);
 }

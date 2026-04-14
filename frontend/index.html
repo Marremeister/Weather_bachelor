@@ -90,6 +90,24 @@
         </div>
       </section>
 
+      <!-- Wind Rose Charts -->
+      <section id="windrose-section" class="charts-row" hidden>
+        <div class="card chart-card">
+          <div class="section-header">
+            <h3>Morning Wind Rose</h3>
+            <button id="export-morning-wr-png-btn" class="btn-export">Save PNG</button>
+          </div>
+          <div id="morning-windrose-chart" class="chart-container chart-container-sm"></div>
+        </div>
+        <div class="card chart-card">
+          <div class="section-header">
+            <h3>Afternoon Wind Rose</h3>
+            <button id="export-afternoon-wr-png-btn" class="btn-export">Save PNG</button>
+          </div>
+          <div id="afternoon-windrose-chart" class="chart-container chart-container-sm"></div>
+        </div>
+      </section>
+
       <!-- Hourly Data Table -->
       <section class="card" id="hourly-section" hidden>
         <div class="section-header">
@@ -109,6 +127,30 @@
         </div>
         <div class="table-scroll">
           <table id="analog-table" class="data-table"></table>
+        </div>
+      </section>
+
+      <!-- Data Quality & Source Bias -->
+      <section class="card" id="bias-quality-section" hidden>
+        <div class="section-header">
+          <h2>Data Quality &amp; Source Bias</h2>
+        </div>
+        <div id="quality-indicators" class="summary-grid" style="margin-bottom:1.25rem;"></div>
+        <div id="bias-chart-wrapper" hidden>
+          <div class="section-header">
+            <h3>Bias Correction Statistics</h3>
+            <button id="export-bias-png-btn" class="btn-export">Save PNG</button>
+          </div>
+          <div id="bias-chart" class="chart-container"></div>
+          <div class="table-scroll" style="margin-top:0.75rem;">
+            <table id="bias-table" class="data-table"></table>
+          </div>
+        </div>
+        <div id="bias-no-data" hidden>
+          <p style="color:#868e96;font-size:0.9rem;">
+            No bias calibration data available for this location.
+            Run bias calibration to see source bias statistics.
+          </p>
         </div>
       </section>
 
