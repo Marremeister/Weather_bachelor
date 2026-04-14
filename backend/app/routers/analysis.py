@@ -143,20 +143,19 @@ def export_weather_csv(
 
     start_dt = _dt.datetime.combine(run.target_date, time.min)
     end_dt = _dt.datetime.combine(run.target_date, time.max)
+    export_source = run.forecast_source or run.historical_source
 
-    records = (
-        db.execute(
-            select(WeatherRecord)
-            .where(
-                WeatherRecord.location_id == run.location_id,
-                WeatherRecord.valid_time_local >= start_dt,
-                WeatherRecord.valid_time_local <= end_dt,
-            )
-            .order_by(WeatherRecord.valid_time_local)
+    stmt = (
+        select(WeatherRecord)
+        .where(
+            WeatherRecord.location_id == run.location_id,
+            WeatherRecord.valid_time_local >= start_dt,
+            WeatherRecord.valid_time_local <= end_dt,
         )
-        .scalars()
-        .all()
     )
+    if export_source:
+        stmt = stmt.where(WeatherRecord.source == export_source)
+    records = db.execute(stmt.order_by(WeatherRecord.valid_time_local)).scalars().all()
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -239,20 +238,19 @@ def export_analysis_json(
 
     start_dt = _dt.datetime.combine(run.target_date, time.min)
     end_dt = _dt.datetime.combine(run.target_date, time.max)
+    export_source = run.forecast_source or run.historical_source
 
-    records = (
-        db.execute(
-            select(WeatherRecord)
-            .where(
-                WeatherRecord.location_id == run.location_id,
-                WeatherRecord.valid_time_local >= start_dt,
-                WeatherRecord.valid_time_local <= end_dt,
-            )
-            .order_by(WeatherRecord.valid_time_local)
+    stmt = (
+        select(WeatherRecord)
+        .where(
+            WeatherRecord.location_id == run.location_id,
+            WeatherRecord.valid_time_local >= start_dt,
+            WeatherRecord.valid_time_local <= end_dt,
         )
-        .scalars()
-        .all()
     )
+    if export_source:
+        stmt = stmt.where(WeatherRecord.source == export_source)
+    records = db.execute(stmt.order_by(WeatherRecord.valid_time_local)).scalars().all()
 
     run_response = AnalysisRunResponse.model_validate(run)
     analog_responses = [AnalogResultResponse.model_validate(a) for a in analogs]
