@@ -17,7 +17,8 @@ from app.models.analog_result import AnalogResult
 from app.models.weather_record import WeatherRecord
 from app.schemas.analog import AnalogCandidate
 from app.schemas.features import AnalysisWindow, DailyFeatures
-from app.services.feature_service import compute_daily_features
+from app.services.feature_service import compute_daily_features, compute_feature_config_hash
+from app.services.library_service import get_precomputed_features
 from app.services.weather_provider import WeatherProvider
 from app.services.weather_service import fetch_weather, get_provider
 
@@ -244,13 +245,27 @@ def run_analog_analysis(
     db.refresh(run)
 
     try:
-        # -- Fetch historical weather in yearly chunks --
-        for chunk_start, chunk_end in yearly_chunks(hist_start, hist_end):
-            count, cached = fetch_weather(db, hist_provider, location, chunk_start, chunk_end)
+        # -- Check for precomputed feature library --
+        if window is None:
+            window = AnalysisWindow()
+        config_hash = compute_feature_config_hash(window)
+        hist_source_name = hist_provider.source_name
+        precomputed = get_precomputed_features(db, location.id, hist_source_name, config_hash)
+
+        if precomputed:
             logger.info(
-                "Chunk %s–%s: %d records (cached=%s)",
-                chunk_start, chunk_end, count, cached,
+                "Using precomputed feature library (%d days) for source=%s",
+                len(precomputed), hist_source_name,
             )
+            historical_features = precomputed
+        else:
+            # -- Fetch historical weather in yearly chunks (on-the-fly) --
+            for chunk_start, chunk_end in yearly_chunks(hist_start, hist_end):
+                count, cached = fetch_weather(db, hist_provider, location, chunk_start, chunk_end)
+                logger.info(
+                    "Chunk %s\u2013%s: %d records (cached=%s)",
+                    chunk_start, chunk_end, count, cached,
+                )
 
         # -- Fetch target date weather (with GFS fallback) --
         try:
@@ -273,40 +288,11 @@ def run_analog_analysis(
                 raise
         logger.info("Target %s: %d records (cached=%s)", target_date, t_count, t_cached)
 
-        # -- Load weather records from DB for the full date range --
-        # When forecast mode uses a different provider, load target and
-        # historical records separately to avoid mixing sources.
+        # -- Compute target-day features --
         from collections import defaultdict
 
-        by_date: dict[date, list] = defaultdict(list)
-
-        use_separate_sources = (
-            mode == "forecast"
-            and target_provider.source_name != hist_provider.source_name
-        )
-
-        if use_separate_sources:
-            # Historical records
-            hist_start_dt = datetime.combine(hist_start, time.min)
-            hist_end_dt = datetime.combine(hist_end, time(23, 59, 59))
-            hist_records = (
-                db.execute(
-                    select(WeatherRecord)
-                    .where(
-                        WeatherRecord.location_id == location.id,
-                        WeatherRecord.source == hist_provider.source_name,
-                        WeatherRecord.valid_time_local >= hist_start_dt,
-                        WeatherRecord.valid_time_local <= hist_end_dt,
-                    )
-                    .order_by(WeatherRecord.valid_time_local)
-                )
-                .scalars()
-                .all()
-            )
-            for rec in hist_records:
-                by_date[rec.valid_time_local.date()].append(rec)
-
-            # Target records
+        if precomputed:
+            # Only need to load target-day records
             target_start_dt = datetime.combine(target_date, time.min)
             target_end_dt = datetime.combine(target_date, time(23, 59, 59))
             target_records = (
@@ -323,40 +309,94 @@ def run_analog_analysis(
                 .scalars()
                 .all()
             )
-            for rec in target_records:
-                by_date[rec.valid_time_local.date()].append(rec)
-        else:
-            all_start = min(hist_start, target_date)
-            all_end = max(hist_end, target_date)
-            start_dt = datetime.combine(all_start, time.min)
-            end_dt = datetime.combine(all_end, time(23, 59, 59))
-
-            records = (
-                db.execute(
-                    select(WeatherRecord)
-                    .where(
-                        WeatherRecord.location_id == location.id,
-                        WeatherRecord.valid_time_local >= start_dt,
-                        WeatherRecord.valid_time_local <= end_dt,
-                    )
-                    .order_by(WeatherRecord.valid_time_local)
+            target_features: DailyFeatures | None = None
+            if target_records:
+                target_features = compute_daily_features(
+                    target_records, location.id, target_date, window
                 )
-                .scalars()
-                .all()
+        else:
+            # -- Load weather records from DB for the full date range --
+            # When forecast mode uses a different provider, load target and
+            # historical records separately to avoid mixing sources.
+            by_date: dict[date, list] = defaultdict(list)
+
+            use_separate_sources = (
+                mode == "forecast"
+                and target_provider.source_name != hist_provider.source_name
             )
-            for rec in records:
-                by_date[rec.valid_time_local.date()].append(rec)
 
-        # -- Compute DailyFeatures per day --
-        historical_features: list[DailyFeatures] = []
-        target_features: DailyFeatures | None = None
+            if use_separate_sources:
+                # Historical records
+                hist_start_dt = datetime.combine(hist_start, time.min)
+                hist_end_dt = datetime.combine(hist_end, time(23, 59, 59))
+                hist_records = (
+                    db.execute(
+                        select(WeatherRecord)
+                        .where(
+                            WeatherRecord.location_id == location.id,
+                            WeatherRecord.source == hist_provider.source_name,
+                            WeatherRecord.valid_time_local >= hist_start_dt,
+                            WeatherRecord.valid_time_local <= hist_end_dt,
+                        )
+                        .order_by(WeatherRecord.valid_time_local)
+                    )
+                    .scalars()
+                    .all()
+                )
+                for rec in hist_records:
+                    by_date[rec.valid_time_local.date()].append(rec)
 
-        for day, day_records in by_date.items():
-            feat = compute_daily_features(day_records, location.id, day, window)
-            if day == target_date:
-                target_features = feat
+                # Target records
+                target_start_dt = datetime.combine(target_date, time.min)
+                target_end_dt = datetime.combine(target_date, time(23, 59, 59))
+                target_records = (
+                    db.execute(
+                        select(WeatherRecord)
+                        .where(
+                            WeatherRecord.location_id == location.id,
+                            WeatherRecord.source == target_provider.source_name,
+                            WeatherRecord.valid_time_local >= target_start_dt,
+                            WeatherRecord.valid_time_local <= target_end_dt,
+                        )
+                        .order_by(WeatherRecord.valid_time_local)
+                    )
+                    .scalars()
+                    .all()
+                )
+                for rec in target_records:
+                    by_date[rec.valid_time_local.date()].append(rec)
             else:
-                historical_features.append(feat)
+                all_start = min(hist_start, target_date)
+                all_end = max(hist_end, target_date)
+                start_dt = datetime.combine(all_start, time.min)
+                end_dt = datetime.combine(all_end, time(23, 59, 59))
+
+                records = (
+                    db.execute(
+                        select(WeatherRecord)
+                        .where(
+                            WeatherRecord.location_id == location.id,
+                            WeatherRecord.valid_time_local >= start_dt,
+                            WeatherRecord.valid_time_local <= end_dt,
+                        )
+                        .order_by(WeatherRecord.valid_time_local)
+                    )
+                    .scalars()
+                    .all()
+                )
+                for rec in records:
+                    by_date[rec.valid_time_local.date()].append(rec)
+
+            # -- Compute DailyFeatures per day --
+            historical_features: list[DailyFeatures] = []
+            target_features = None
+
+            for day, day_records in by_date.items():
+                feat = compute_daily_features(day_records, location.id, day, window)
+                if day == target_date:
+                    target_features = feat
+                else:
+                    historical_features.append(feat)
 
         if target_features is None:
             run.status = "failed"
@@ -392,7 +432,26 @@ def run_analog_analysis(
 
         # Add model run metadata to summary for forecast mode
         if mode == "forecast":
-            target_day_records = by_date.get(target_date, [])
+            # When using precomputed features, by_date may not exist;
+            # load target-day records directly for metadata.
+            if precomputed:
+                _t_start = datetime.combine(target_date, time.min)
+                _t_end = datetime.combine(target_date, time(23, 59, 59))
+                target_day_records = (
+                    db.execute(
+                        select(WeatherRecord)
+                        .where(
+                            WeatherRecord.location_id == location.id,
+                            WeatherRecord.source == target_provider.source_name,
+                            WeatherRecord.valid_time_local >= _t_start,
+                            WeatherRecord.valid_time_local <= _t_end,
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+            else:
+                target_day_records = by_date.get(target_date, [])
             model_run_times = [
                 r.model_run_time for r in target_day_records
                 if hasattr(r, "model_run_time") and r.model_run_time is not None
