@@ -18,10 +18,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Convert timestamptz → timestamp (strips timezone, keeps the stored instant).
-    # Existing rows were inserted with the local tz offset so the instant *is*
-    # the correct wall-clock time once we drop the tz qualifier.  Any rows that
-    # were normalised to UTC by Postgres need to be re-fetched (drop & re-cache).
+    # Existing rows have valid_time_local normalised to UTC by Postgres
+    # (timestamptz stores instants, not wall-clock times).  Truncate so
+    # re-fetches populate correct naive local times.  Filesystem cache
+    # still has the raw API responses, so the next fetch is a tier-2 hit.
+    op.execute("TRUNCATE TABLE weather_records")
     op.execute(
         "ALTER TABLE weather_records "
         "ALTER COLUMN valid_time_local TYPE timestamp WITHOUT TIME ZONE "
