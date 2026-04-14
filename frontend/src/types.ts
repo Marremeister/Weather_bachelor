@@ -100,3 +100,31 @@ export interface AnalysisRunDetail {
   created_at: string;
   analogs: AnalogResult[];
 }
+
+export interface LibraryStatusResponse {
+  id?: number;
+  location_id: number;
+  source?: string;
+  total_chunks?: number;
+  completed_chunks?: number;
+  status: string;
+  error_message?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+}
+
+export interface BiasReportResponse {
+  location_id: number;
+  corrections: BiasCorrection[];
+}
+
+export interface BiasCorrection {
+  forecast_source: string;
+  historical_source: string;
+  feature_name: string;
+  bias_mean: number;
+  bias_std: number;
+  calibration_start: string;
+  calibration_end: string;
+  sample_count: number;
+}

@@ -171,7 +171,7 @@ function applyMode(mode: "historical" | "forecast") {
     histEndInput.value = "2024-09-30";
     histStartInput.readOnly = true;
     histEndInput.readOnly = true;
-    modeInfoEl.textContent = "Historical range auto-set to ERA5 library";
+    modeInfoEl.textContent = "Using ERA5 reanalysis library for historical matching";
   } else {
     // Restrict to today
     targetDateInput.max = new Date().toISOString().slice(0, 10);
@@ -294,7 +294,7 @@ analysisForm.addEventListener("submit", async (e) => {
       top_n: Number(topNInput.value),
       mode: currentMode,
       forecast_source: currentMode === "forecast" ? "gfs" : undefined,
-      historical_source: currentMode === "forecast" ? "open_meteo" : undefined,
+      historical_source: currentMode === "forecast" ? "era5" : undefined,
     });
     const weatherRecords = await getWeatherRecords(
       locationId, targetDateInput.value, targetDateInput.value,

@@ -1,4 +1,4 @@
-import type { AnalysisRequest, AnalysisRunDetail, AnalysisRunSummary, AnalogResult, HealthResponse, Location, SeaBreezeClassification, WeatherFetchResponse, WeatherRecord } from "./types";
+import type { AnalysisRequest, AnalysisRunDetail, AnalysisRunSummary, AnalogResult, BiasReportResponse, HealthResponse, LibraryStatusResponse, Location, SeaBreezeClassification, WeatherFetchResponse, WeatherRecord } from "./types";
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch("/api/health");
@@ -115,4 +115,58 @@ export async function getAnalysisAnalogs(
     throw new Error(`Analysis analogs fetch failed: ${res.status}`);
   }
   return res.json() as Promise<AnalogResult[]>;
+}
+
+export async function triggerLibraryBuild(
+  locationId: number,
+  source: string = "era5",
+): Promise<{ status: string; location_id: number; source: string }> {
+  const params = new URLSearchParams({
+    location_id: String(locationId),
+    source,
+  });
+  const res = await fetch(`/api/library/build?${params}`, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(`Library build trigger failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getLibraryStatus(
+  locationId: number,
+): Promise<LibraryStatusResponse> {
+  const params = new URLSearchParams({
+    location_id: String(locationId),
+  });
+  const res = await fetch(`/api/library/status?${params}`);
+  if (!res.ok) {
+    throw new Error(`Library status fetch failed: ${res.status}`);
+  }
+  return res.json() as Promise<LibraryStatusResponse>;
+}
+
+export async function triggerBiasCalibration(
+  locationId: number,
+): Promise<{ status: string; location_id: number }> {
+  const params = new URLSearchParams({
+    location_id: String(locationId),
+  });
+  const res = await fetch(`/api/library/calibrate?${params}`, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(`Bias calibration trigger failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getBiasReport(
+  locationId: number,
+): Promise<BiasReportResponse> {
+  const params = new URLSearchParams({
+    location_id: String(locationId),
+  });
+  const res = await fetch(`/api/library/bias-report?${params}`);
+  if (!res.ok) {
+    throw new Error(`Bias report fetch failed: ${res.status}`);
+  }
+  return res.json() as Promise<BiasReportResponse>;
 }

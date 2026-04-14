@@ -11,7 +11,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import SessionLocal
 from app.models.location import Location
-from app.routers import analysis, classification, locations, weather
+from app.routers import analysis, classification, library, locations, weather
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -55,6 +55,7 @@ app.include_router(locations.router)
 app.include_router(weather.router)
 app.include_router(classification.router)
 app.include_router(analysis.router)
+app.include_router(library.router)
 
 
 def _get_psycopg_dsn() -> str:
