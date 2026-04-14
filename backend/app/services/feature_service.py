@@ -2,12 +2,44 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from datetime import date
 
 import numpy as np
 
 from app.schemas.features import AnalysisWindow, DailyFeatures
+
+# The 9 feature fields stored in the daily_features table.
+_DEFAULT_FEATURE_NAMES = (
+    "morning_mean_wind_speed",
+    "morning_mean_wind_direction",
+    "reference_wind_speed",
+    "reference_wind_direction",
+    "afternoon_max_wind_speed",
+    "afternoon_mean_wind_direction",
+    "wind_speed_increase",
+    "wind_direction_shift",
+    "onshore_fraction",
+)
+
+
+def compute_feature_config_hash(
+    window: AnalysisWindow,
+    feature_names: list[str] | tuple[str, ...] | None = None,
+) -> str:
+    """Deterministic 16-hex-char hash of the feature extraction configuration.
+
+    Changes whenever the analysis window parameters or the set of extracted
+    features change, which signals that precomputed libraries need rebuilding.
+    """
+    names = sorted(feature_names) if feature_names else sorted(_DEFAULT_FEATURE_NAMES)
+    payload = json.dumps(
+        {"window": window.model_dump(), "features": names},
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
 def circular_mean(degrees: list[float]) -> float:
