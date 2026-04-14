@@ -29,27 +29,33 @@ from app.services.weather_service import fetch_weather, get_provider
 logger = logging.getLogger(__name__)
 
 
+_LIVE_ONLY_SOURCES = frozenset({"gfs", "gfs_open_meteo", "open_meteo_forecast"})
+"""Sources that use live/forecast-only endpoints and cannot serve historical dates."""
+
+
 def calibrate_bias(
     location_id: int,
     overlap_days: int | None = None,
-    forecast_source: str = "gfs_open_meteo",
+    forecast_source: str = "open_meteo",
     historical_source: str = "era5",
 ) -> None:
     """Compute per-feature bias corrections between two sources.
 
     Runs as a BackgroundTask with its own DB session.
 
-    The default *forecast_source* is ``gfs_open_meteo`` because the live
-    ``gfs`` provider only serves the latest published cycle and cannot
-    retrieve the historical dates needed for calibration overlap.
+    The default *forecast_source* is ``open_meteo`` (Open-Meteo archive API)
+    because the calibration window is clamped to the ERA5 historical season.
+    Live/forecast-only providers (``gfs``, ``gfs_open_meteo``,
+    ``open_meteo_forecast``) cannot fetch those dates and are rejected.
     """
-    if forecast_source == "gfs":
-        logger.warning(
-            "Bias calibration: 'gfs' provider cannot fetch historical dates; "
-            "switching to 'gfs_open_meteo'.  Pass forecast_source='gfs_open_meteo' "
-            "explicitly to silence this warning."
+    if forecast_source in _LIVE_ONLY_SOURCES:
+        logger.error(
+            "Bias calibration: '%s' is a live/forecast-only provider and cannot "
+            "fetch the historical dates needed for calibration.  Use a provider "
+            "with archive/historical support (e.g. 'open_meteo').",
+            forecast_source,
         )
-        forecast_source = "gfs_open_meteo"
+        return
 
     if overlap_days is None:
         overlap_days = settings.bias_overlap_days
