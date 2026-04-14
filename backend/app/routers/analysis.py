@@ -316,7 +316,7 @@ def get_sea_breeze_panel(
 
     def _classify_day(
         loc_id: int, day: _dt.date, source: str | None,
-    ) -> DayClassificationDetail:
+    ) -> DayClassificationDetail | None:
         start_dt = _dt.datetime.combine(day, time.min)
         end_dt = _dt.datetime.combine(day, time.max)
         stmt = select(WeatherRecord).where(
@@ -331,7 +331,11 @@ def get_sea_breeze_panel(
             .scalars()
             .all()
         )
+        if not records:
+            return None
         features = compute_daily_features(records, loc_id, day)
+        if features.wind_speed_increase is None and features.onshore_fraction is None:
+            return None
         classification = classify_sea_breeze(features, thresholds)
         return DayClassificationDetail(
             date=day,
@@ -344,7 +348,8 @@ def get_sea_breeze_panel(
     analog_details: list[DayClassificationDetail] = []
     for analog in analogs:
         detail = _classify_day(run.location_id, analog.analog_date, analog_source)
-        analog_details.append(detail)
+        if detail is not None:
+            analog_details.append(detail)
 
     high = sum(1 for a in analog_details if a.classification.classification == "high")
     medium = sum(1 for a in analog_details if a.classification.classification == "medium")

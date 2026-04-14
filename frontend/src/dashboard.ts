@@ -303,14 +303,22 @@ export function renderSeaBreezeGauges(
   container: HTMLElement,
   data: SeaBreezePanelData,
 ): void {
+  if (!data.target) {
+    container.innerHTML = `<p style="color:#868e96;font-size:0.9rem;">Insufficient weather data to classify the target day.</p>`;
+    return;
+  }
+
   const f = data.target.features;
   const t = data.thresholds;
   const cls = data.target.classification;
+
+  const absShift = Math.abs(f.wind_direction_shift ?? 0);
 
   const gauges = [
     {
       label: "Speed Increase",
       value: f.wind_speed_increase,
+      gaugeValue: f.wind_speed_increase ?? 0,
       max: Math.max(t.minimum_speed_increase_mps * 2, (f.wind_speed_increase ?? 0) * 1.3, 5),
       threshold: t.minimum_speed_increase_mps,
       unit: "m/s",
@@ -319,7 +327,8 @@ export function renderSeaBreezeGauges(
     {
       label: "Direction Shift",
       value: f.wind_direction_shift,
-      max: Math.max(t.minimum_direction_shift_degrees * 2, (f.wind_direction_shift ?? 0) * 1.3, 90),
+      gaugeValue: absShift,
+      max: Math.max(t.minimum_direction_shift_degrees * 2, absShift * 1.3, 90),
       threshold: t.minimum_direction_shift_degrees,
       unit: "°",
       met: cls.indicators.direction_shift ?? false,
@@ -327,6 +336,7 @@ export function renderSeaBreezeGauges(
     {
       label: "Onshore Fraction",
       value: f.onshore_fraction,
+      gaugeValue: f.onshore_fraction ?? 0,
       max: 1,
       threshold: t.minimum_onshore_fraction,
       unit: "",
@@ -336,11 +346,11 @@ export function renderSeaBreezeGauges(
 
   const gaugeHtml = gauges
     .map((g) => {
-      const val = g.value ?? 0;
-      const pct = Math.min((val / g.max) * 100, 100);
+      const pct = Math.min((g.gaugeValue / g.max) * 100, 100);
       const threshPct = Math.min((g.threshold / g.max) * 100, 100);
       const color = g.met ? "#2b8a3e" : "#c92a2a";
-      const displayVal = g.unit === "" ? `${(val * 100).toFixed(0)}%` : `${val.toFixed(1)} ${g.unit}`;
+      const raw = g.value ?? 0;
+      const displayVal = g.unit === "" ? `${(raw * 100).toFixed(0)}%` : `${raw.toFixed(1)} ${g.unit}`;
       return `
         <div class="sb-gauge">
           <div class="sb-gauge-label">

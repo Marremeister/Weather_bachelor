@@ -62,7 +62,7 @@ class DayClassificationDetail(BaseModel):
 
 class SeaBreezePanelResponse(BaseModel):
     run_id: int
-    target: DayClassificationDetail
+    target: DayClassificationDetail | None
     analogs: list[DayClassificationDetail]
     thresholds: SeaBreezeThresholds
     analog_high_count: int

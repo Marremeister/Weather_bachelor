@@ -149,7 +149,7 @@ export interface DayClassificationDetail {
 
 export interface SeaBreezePanelData {
   run_id: number;
-  target: DayClassificationDetail;
+  target: DayClassificationDetail | null;
   analogs: DayClassificationDetail[];
   thresholds: SeaBreezeThresholds;
   analog_high_count: number;
