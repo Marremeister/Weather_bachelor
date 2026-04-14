@@ -2,6 +2,10 @@
 
 Downloads GFS 0.25-degree GRIB2 files from NCAR RDA, parses them with
 cfgrib/xarray, extracts nearest-point data, and returns HourlyRecords.
+
+Key design: the provider picks the latest *already-published* GFS cycle,
+then computes forecast-hour offsets so each valid time lands inside the
+requested target day's local analysis window (default 08:00–16:00 local).
 """
 
 from __future__ import annotations
@@ -11,7 +15,6 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import numpy as np
 import requests
 
 from app.config import settings
@@ -28,13 +31,76 @@ logger = logging.getLogger(__name__)
 
 NCAR_BASE = "https://thredds.rda.ucar.edu/thredds/fileServer/files/g/d084001"
 
+# GFS cycles run at 00, 06, 12, 18 UTC
+_GFS_CYCLES = [0, 6, 12, 18]
+
 
 class GfsDownloadError(Exception):
     """Raised when GFS GRIB download fails and fallback should be attempted."""
 
 
+def _latest_available_cycle(now_utc: datetime) -> tuple[datetime, int]:
+    """Return (model_run_time, cycle_hour) for the latest GFS cycle
+    whose data is likely published, accounting for processing lag.
+
+    GFS data becomes available ~5 hours after cycle init.
+    """
+    lag = settings.gfs_publish_lag_hours
+    available_at = now_utc - timedelta(hours=lag)
+
+    # Walk backwards through cycles to find the latest one
+    for hours_back in range(0, 48, 6):
+        candidate = available_at - timedelta(hours=hours_back)
+        cycle_hour = (candidate.hour // 6) * 6
+        run_time = candidate.replace(
+            hour=cycle_hour, minute=0, second=0, microsecond=0
+        )
+        # The run must have been initialized *before* the available-at cutoff
+        if run_time + timedelta(hours=lag) <= now_utc:
+            return run_time, cycle_hour
+
+    # Absolute fallback: yesterday's 00Z
+    yesterday = (now_utc - timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    return yesterday, 0
+
+
+def _forecast_hours_for_window(
+    model_run_time: datetime,
+    target_date: date,
+    timezone: str,
+    local_start: int,
+    local_end: int,
+) -> list[int]:
+    """Compute the GFS forecast hours (offsets from model_run_time)
+    whose valid times land in [local_start, local_end] on target_date.
+
+    Returns sorted list of integer forecast hours (e.g. [15, 16, ..., 23]).
+    """
+    tz = ZoneInfo(timezone)
+    utc = ZoneInfo("UTC")
+
+    hours: list[int] = []
+    for local_hour in range(local_start, local_end + 1):
+        local_dt = datetime(
+            target_date.year, target_date.month, target_date.day,
+            local_hour, 0, 0, tzinfo=tz,
+        )
+        utc_dt = local_dt.astimezone(utc)
+        fhour = int((utc_dt - model_run_time).total_seconds() / 3600)
+        if fhour >= 0:
+            hours.append(fhour)
+
+    return sorted(hours)
+
+
 class GfsForecastProvider(WeatherProvider):
-    """Fetches GFS forecast data from NCAR RDA GRIB2 files."""
+    """Fetches GFS forecast data from NCAR RDA GRIB2 files.
+
+    Automatically selects the latest available GFS cycle and computes
+    forecast hours covering the target day's analysis window.
+    """
 
     @property
     def source_name(self) -> str:
@@ -111,7 +177,6 @@ class GfsForecastProvider(WeatherProvider):
     ) -> list[HourlyRecord]:
         """Parse a GRIB2 file and extract nearest-point data as HourlyRecords."""
         tz = ZoneInfo(timezone)
-        utc = ZoneInfo("UTC")
 
         # Extract target variables
         u10_da = _open_target_da(str(path), "u10")
@@ -209,28 +274,47 @@ class GfsForecastProvider(WeatherProvider):
     ) -> FetchResult:
         """Fetch GFS forecast data for the given date range.
 
-        Downloads GRIB2 files for each date × forecast hour combination,
-        parses them, and returns a FetchResult.
+        Picks the latest available GFS cycle, computes forecast-hour
+        offsets covering the analysis window (local 08:00–16:00) on each
+        target day, and downloads the corresponding GRIB2 files.
         """
-        cycle = settings.gfs_cycle
-        forecast_hours = settings.gfs_forecast_hours_list
         utc = ZoneInfo("UTC")
+        now_utc = datetime.now(tz=utc)
+
+        model_run_time, cycle_hour = _latest_available_cycle(now_utc)
+        cycle_str = f"{cycle_hour:02d}"
+        run_yyyymmdd = model_run_time.strftime("%Y%m%d")
+
+        logger.info(
+            "Selected GFS cycle: %s %sZ (lag=%dh)",
+            run_yyyymmdd, cycle_str, settings.gfs_publish_lag_hours,
+        )
+
+        local_start = settings.gfs_analysis_local_start
+        local_end = settings.gfs_analysis_local_end
 
         all_records: list[HourlyRecord] = []
         errors: list[str] = []
+        all_fhours: list[int] = []
 
         current = start_date
         while current <= end_date:
-            yyyymmdd = current.strftime("%Y%m%d")
-            model_run_time = datetime(
-                current.year, current.month, current.day,
-                int(cycle), 0, 0, tzinfo=utc,
+            fhours = _forecast_hours_for_window(
+                model_run_time, current, timezone, local_start, local_end,
+            )
+            all_fhours.extend(fhours)
+
+            logger.info(
+                "Target %s: forecast hours %s from %s %sZ",
+                current, fhours, run_yyyymmdd, cycle_str,
             )
 
-            for fhour_str in forecast_hours:
-                fhour = int(fhour_str)
+            for fhour in fhours:
+                fhour_str = f"{fhour:03d}"
                 try:
-                    grib_path = self._download_grib(yyyymmdd, cycle, fhour_str)
+                    grib_path = self._download_grib(
+                        run_yyyymmdd, cycle_str, fhour_str,
+                    )
                     records = self._parse_grib_to_records(
                         grib_path, latitude, longitude, timezone,
                         model_run_time, fhour,
@@ -240,7 +324,10 @@ class GfsForecastProvider(WeatherProvider):
                     logger.error("GFS download failed: %s", exc)
                     errors.append(str(exc))
                 except Exception as exc:
-                    logger.error("GFS parse failed for %s f%s: %s", yyyymmdd, fhour_str, exc)
+                    logger.error(
+                        "GFS parse failed for %s %sZ f%03d: %s",
+                        run_yyyymmdd, cycle_str, fhour, exc,
+                    )
                     errors.append(str(exc))
 
             current += timedelta(days=1)
@@ -254,8 +341,8 @@ class GfsForecastProvider(WeatherProvider):
             records=all_records,
             raw_payload={
                 "source": "gfs",
-                "cycle": cycle,
-                "forecast_hours": forecast_hours,
+                "model_run": f"{run_yyyymmdd}_{cycle_str}Z",
+                "forecast_hours": sorted(set(all_fhours)),
                 "record_count": len(all_records),
             },
         )

@@ -50,8 +50,21 @@ def _cache_path(source: str, lat: float, lng: float, start: date, end: date) -> 
     )
 
 
-def _expected_hours(start: date, end: date) -> int:
-    return (end - start).days * 24 + 24
+def _expected_hours(start: date, end: date, source: str = "") -> int:
+    """Expected record count for a date range.
+
+    Open-Meteo sources provide 24 hourly records per day.
+    GFS provides one record per analysis-window hour (default 9/day).
+    """
+    days = (end - start).days + 1
+    if source == "gfs":
+        hours_per_day = (
+            settings.gfs_analysis_local_end
+            - settings.gfs_analysis_local_start
+            + 1
+        )
+        return days * hours_per_day
+    return days * 24
 
 
 def _upsert_records(
@@ -131,7 +144,7 @@ def fetch_weather(
     Returns (record_count, cached).
     """
     source = provider.source_name
-    expected = _expected_hours(start_date, end_date)
+    expected = _expected_hours(start_date, end_date, source)
 
     # Tier 1: Check Postgres
     existing = _count_existing(db, location.id, source, start_date, end_date)

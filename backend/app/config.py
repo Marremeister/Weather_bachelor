@@ -13,19 +13,14 @@ class Settings(BaseSettings):
 
     # GFS forecast settings
     grib_cache_dir: str = "../data/grib_cache"
-    gfs_cycle: str = "00"
-    gfs_forecast_hours: str = "015,018"
-    analog_match_local_hour: int = 9
+    gfs_analysis_local_start: int = 8   # local hour, analysis window start
+    gfs_analysis_local_end: int = 16    # local hour, analysis window end
+    gfs_publish_lag_hours: int = 5      # hours after cycle init before data is published
     point_buffer_deg: float = 0.40
     gfs_download_timeout: int = 180
     gfs_fallback_to_open_meteo: bool = True
 
     model_config = {"env_file": ".env", "extra": "ignore"}
-
-    @property
-    def gfs_forecast_hours_list(self) -> list[str]:
-        """Parse comma-separated forecast hours into a list."""
-        return [h.strip() for h in self.gfs_forecast_hours.split(",") if h.strip()]
 
     @field_validator("database_url")
     @classmethod
