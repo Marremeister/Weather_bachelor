@@ -36,6 +36,9 @@ def get_provider(source_name: str) -> WeatherProvider:
     if source_name == "gfs_open_meteo":
         from app.services.gfs_open_meteo_provider import GfsOpenMeteoProvider
         return GfsOpenMeteoProvider()
+    if source_name == "era5":
+        from app.services.era5_provider import Era5Provider
+        return Era5Provider()
     raise ValueError(f"Unknown weather source: {source_name!r}")
 
 
