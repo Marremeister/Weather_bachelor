@@ -35,7 +35,7 @@ services:
     image: node:22-alpine
     working_dir: /app
     ports:
-      - "5174:5173"
+      - "5175:5173"
     environment:
       VITE_API_TARGET: "http://backend:8000"
     volumes:
