@@ -144,16 +144,17 @@ analysisForm.addEventListener("submit", async (e) => {
   runBtn.innerHTML = `<span class="loading-spinner"></span>Running…`;
 
   try {
-    const [analysisRun, weatherRecords] = await Promise.all([
-      runAnalysis({
-        location_id: locationId,
-        target_date: targetDateInput.value,
-        historical_start_date: histStartInput.value,
-        historical_end_date: histEndInput.value,
-        top_n: Number(topNInput.value),
-      }),
-      getWeatherRecords(locationId, targetDateInput.value, targetDateInput.value),
-    ]);
+    // Run analysis first — it fetches/caches target-day weather data
+    const analysisRun = await runAnalysis({
+      location_id: locationId,
+      target_date: targetDateInput.value,
+      historical_start_date: histStartInput.value,
+      historical_end_date: histEndInput.value,
+      top_n: Number(topNInput.value),
+    });
+    const weatherRecords = await getWeatherRecords(
+      locationId, targetDateInput.value, targetDateInput.value,
+    );
 
     // Summary
     renderSummaryPanel(summaryPanel, analysisRun);
