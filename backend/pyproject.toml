@@ -1,0 +1,11 @@
+[project]
+name = "seabreeze-backend"
+version = "0.1.0"
+description = "Sea Breeze Analog — backend API"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic-settings>=2.6",
+    "psycopg[binary]>=3.2",
+]

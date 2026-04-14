@@ -1,0 +1,59 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #f8f9fa;
+  color: #212529;
+  display: flex;
+  justify-content: center;
+  padding: 3rem 1rem;
+}
+
+#app {
+  max-width: 480px;
+  width: 100%;
+}
+
+h1 {
+  font-size: 1.75rem;
+  margin-bottom: 1.5rem;
+}
+
+#health-status {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+}
+
+.status-row + .status-row {
+  border-top: 1px solid #f1f3f5;
+}
+
+.status-label {
+  font-weight: 600;
+}
+
+.status-healthy {
+  color: #2b8a3e;
+}
+
+.status-degraded {
+  color: #e67700;
+}
+
+.status-error {
+  color: #c92a2a;
+}
