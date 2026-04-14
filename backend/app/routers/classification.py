@@ -40,7 +40,19 @@ def get_classification(
         .all()
     )
 
+    if not records:
+        raise HTTPException(
+            status_code=404,
+            detail="No weather records found for this date. Fetch weather data first.",
+        )
+
     features = compute_daily_features(records, location_id, date_param)
+
+    if features.wind_speed_increase is None and features.onshore_fraction is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Insufficient weather data to classify. Need enough morning and afternoon observations.",
+        )
 
     thresholds = SeaBreezeThresholds()
     if minimum_speed_increase_mps is not None:
