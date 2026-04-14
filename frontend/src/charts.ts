@@ -5,6 +5,7 @@ import {
   TitleComponent,
   TooltipComponent,
   DataZoomComponent,
+  LegendComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { WeatherRecord } from "./types";
@@ -16,29 +17,31 @@ use([
   TitleComponent,
   TooltipComponent,
   DataZoomComponent,
+  LegendComponent,
   CanvasRenderer,
 ]);
 
-let speedChart: ECharts | null = null;
-let directionChart: ECharts | null = null;
+let windOverlayChart: ECharts | null = null;
+let tempPressureChart: ECharts | null = null;
 
-export function renderWindSpeedChart(
+export function renderWindOverlayChart(
   container: HTMLElement,
   records: WeatherRecord[],
   source?: string,
 ): void {
-  if (speedChart) {
-    speedChart.dispose();
+  if (windOverlayChart) {
+    windOverlayChart.dispose();
   }
-  speedChart = init(container);
+  windOverlayChart = init(container);
 
   const times = records.map((r) => {
     const d = new Date(r.valid_time_local);
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   });
   const speeds = records.map((r) => r.true_wind_speed);
+  const directions = records.map((r) => r.true_wind_direction);
 
-  speedChart.setOption({
+  windOverlayChart.setOption({
     title: source
       ? {
           subtext: `Source: ${source}`,
@@ -49,27 +52,66 @@ export function renderWindSpeedChart(
     tooltip: {
       trigger: "axis",
       formatter(params: unknown) {
-        const p = (params as Array<{ axisValueLabel: string; value: number | null }>)[0];
-        const val = p.value != null ? `${p.value.toFixed(1)} m/s` : "N/A";
-        return `${p.axisValueLabel}<br/>Wind speed: ${val}`;
+        const items = params as Array<{
+          axisValueLabel: string;
+          seriesName: string;
+          value: number | null;
+          color: string;
+        }>;
+        if (!items.length) return "";
+        let html = items[0].axisValueLabel;
+        for (const item of items) {
+          const val =
+            item.value != null
+              ? item.seriesName === "TWS"
+                ? `${item.value.toFixed(1)} m/s`
+                : `${item.value}°`
+              : "N/A";
+          html += `<br/><span style="color:${item.color}">●</span> ${item.seriesName}: ${val}`;
+        }
+        return html;
       },
     },
-    grid: { left: 50, right: 20, top: source ? 35 : 20, bottom: 50 },
+    legend: { top: source ? 25 : 0, left: "center" },
+    grid: { left: 50, right: 65, top: source ? 60 : 40, bottom: 50 },
     xAxis: {
       type: "category",
       data: times,
       axisLabel: { rotate: 45, fontSize: 11 },
     },
-    yAxis: {
-      type: "value",
-      name: "m/s",
-      nameLocation: "middle",
-      nameGap: 35,
-    },
+    yAxis: [
+      {
+        type: "value",
+        name: "m/s",
+        nameLocation: "middle",
+        nameGap: 35,
+      },
+      {
+        type: "value",
+        name: "Direction",
+        min: 0,
+        max: 360,
+        interval: 90,
+        axisLabel: {
+          formatter(value: number) {
+            const labels: Record<number, string> = {
+              0: "N",
+              90: "E",
+              180: "S",
+              270: "W",
+              360: "N",
+            };
+            return labels[value] ?? `${value}°`;
+          },
+        },
+      },
+    ],
     dataZoom: [{ type: "inside" }],
     series: [
       {
+        name: "TWS",
         type: "line",
+        yAxisIndex: 0,
         data: speeds,
         smooth: true,
         symbol: "circle",
@@ -77,30 +119,36 @@ export function renderWindSpeedChart(
         lineStyle: { color: "#228be6", width: 2 },
         itemStyle: { color: "#228be6" },
       },
+      {
+        name: "TWD",
+        type: "scatter",
+        yAxisIndex: 1,
+        data: directions,
+        symbolSize: 6,
+        itemStyle: { color: "#e67700" },
+      },
     ],
   });
 }
 
-export function renderWindDirectionChart(
+export function renderTempPressureChart(
   container: HTMLElement,
   records: WeatherRecord[],
   source?: string,
 ): void {
-  if (directionChart) {
-    directionChart.dispose();
+  if (tempPressureChart) {
+    tempPressureChart.dispose();
   }
-  directionChart = init(container);
-
-  const data = records
-    .map((r, i) => [i, r.true_wind_direction])
-    .filter((d) => d[1] != null);
+  tempPressureChart = init(container);
 
   const times = records.map((r) => {
     const d = new Date(r.valid_time_local);
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   });
+  const temps = records.map((r) => r.temperature);
+  const pressures = records.map((r) => r.pressure);
 
-  directionChart.setOption({
+  tempPressureChart.setOption({
     title: source
       ? {
           subtext: `Source: ${source}`,
@@ -109,61 +157,88 @@ export function renderWindDirectionChart(
         }
       : undefined,
     tooltip: {
-      trigger: "item",
+      trigger: "axis",
       formatter(params: unknown) {
-        const p = params as { dataIndex: number; value: [number, number] };
-        const idx = p.value[0];
-        const deg = p.value[1];
-        return `${times[idx]}<br/>Direction: ${deg}°`;
+        const items = params as Array<{
+          axisValueLabel: string;
+          seriesName: string;
+          value: number | null;
+          color: string;
+        }>;
+        if (!items.length) return "";
+        let html = items[0].axisValueLabel;
+        for (const item of items) {
+          const val =
+            item.value != null
+              ? item.seriesName === "Temperature"
+                ? `${item.value.toFixed(1)} °C`
+                : `${item.value.toFixed(1)} hPa`
+              : "N/A";
+          html += `<br/><span style="color:${item.color}">●</span> ${item.seriesName}: ${val}`;
+        }
+        return html;
       },
     },
-    grid: { left: 50, right: 20, top: source ? 35 : 20, bottom: 50 },
+    legend: { top: source ? 25 : 0, left: "center" },
+    grid: { left: 50, right: 65, top: source ? 60 : 40, bottom: 50 },
     xAxis: {
       type: "category",
       data: times,
       axisLabel: { rotate: 45, fontSize: 11 },
     },
-    yAxis: {
-      type: "value",
-      min: 0,
-      max: 360,
-      interval: 90,
-      axisLabel: {
-        formatter(value: number) {
-          const labels: Record<number, string> = {
-            0: "N (0°)",
-            90: "E (90°)",
-            180: "S (180°)",
-            270: "W (270°)",
-            360: "N (360°)",
-          };
-          return labels[value] ?? `${value}°`;
-        },
+    yAxis: [
+      {
+        type: "value",
+        name: "°C",
+        nameLocation: "middle",
+        nameGap: 35,
       },
-    },
+      {
+        type: "value",
+        name: "hPa",
+        nameLocation: "middle",
+        nameGap: 45,
+      },
+    ],
     dataZoom: [{ type: "inside" }],
     series: [
       {
-        type: "scatter",
-        data,
-        symbolSize: 6,
-        itemStyle: { color: "#e67700" },
+        name: "Temperature",
+        type: "line",
+        yAxisIndex: 0,
+        data: temps,
+        smooth: true,
+        symbol: "circle",
+        symbolSize: 4,
+        lineStyle: { color: "#e03131", width: 2 },
+        itemStyle: { color: "#e03131" },
+      },
+      {
+        name: "Pressure",
+        type: "line",
+        yAxisIndex: 1,
+        data: pressures,
+        smooth: true,
+        symbol: "circle",
+        symbolSize: 4,
+        lineStyle: { color: "#7048e8", width: 2 },
+        itemStyle: { color: "#7048e8" },
       },
     ],
   });
 }
 
-export function getSpeedChart(): ECharts | null {
-  return speedChart;
+export function getWindOverlayChart(): ECharts | null {
+  return windOverlayChart;
 }
 
-export function getDirectionChart(): ECharts | null {
-  return directionChart;
+export function getTempPressureChart(): ECharts | null {
+  return tempPressureChart;
 }
 
 function handleResize() {
-  speedChart?.resize();
-  directionChart?.resize();
+  windOverlayChart?.resize();
+  tempPressureChart?.resize();
 }
 
 window.addEventListener("resize", handleResize);

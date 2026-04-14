@@ -1,4 +1,4 @@
-import { getSpeedChart, getDirectionChart } from "./charts";
+import { getWindOverlayChart, getTempPressureChart } from "./charts";
 
 function triggerDownload(url: string, filename: string): void {
   const a = document.createElement("a");
@@ -30,16 +30,16 @@ export function downloadAnalysisJson(runId: number, targetDate: string): void {
   );
 }
 
-export function downloadWindSpeedChart(targetDate: string): void {
-  const chart = getSpeedChart();
+export function downloadWindOverlayChart(targetDate: string): void {
+  const chart = getWindOverlayChart();
   if (!chart) return;
   const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
-  triggerDownload(url, `wind_speed_${targetDate}.png`);
+  triggerDownload(url, `wind_overlay_${targetDate}.png`);
 }
 
-export function downloadWindDirectionChart(targetDate: string): void {
-  const chart = getDirectionChart();
+export function downloadTempPressureChart(targetDate: string): void {
+  const chart = getTempPressureChart();
   if (!chart) return;
   const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
-  triggerDownload(url, `wind_direction_${targetDate}.png`);
+  triggerDownload(url, `temp_pressure_${targetDate}.png`);
 }

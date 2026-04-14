@@ -7,7 +7,7 @@ import {
   listAnalysisRuns,
   runAnalysis,
 } from "./api";
-import { renderWindSpeedChart, renderWindDirectionChart } from "./charts";
+import { renderWindOverlayChart, renderTempPressureChart } from "./charts";
 import {
   renderSummaryPanel,
   renderHourlyTable,
@@ -17,8 +17,8 @@ import {
   downloadWeatherCsv,
   downloadAnalogsCsv,
   downloadAnalysisJson,
-  downloadWindSpeedChart,
-  downloadWindDirectionChart,
+  downloadWindOverlayChart,
+  downloadTempPressureChart,
 } from "./export";
 import type { Location, SeaBreezeClassification } from "./types";
 import "./styles.css";
@@ -37,8 +37,8 @@ const analysisError = document.getElementById("analysis-error")!;
 const summarySection = document.getElementById("summary-section")!;
 const summaryPanel = document.getElementById("summary-panel")!;
 const chartsSection = document.getElementById("charts-section")!;
-const speedChartEl = document.getElementById("wind-speed-chart")!;
-const dirChartEl = document.getElementById("wind-direction-chart")!;
+const windOverlayEl = document.getElementById("wind-overlay-chart")!;
+const tempPressureEl = document.getElementById("temp-pressure-chart")!;
 const hourlySection = document.getElementById("hourly-section")!;
 const hourlyTable = document.getElementById("hourly-table")!;
 const analogSection = document.getElementById("analog-section")!;
@@ -46,8 +46,8 @@ const analogTable = document.getElementById("analog-table")!;
 
 // Export buttons
 const exportJsonBtn = document.getElementById("export-json-btn") as HTMLButtonElement;
-const exportSpeedPngBtn = document.getElementById("export-speed-png-btn") as HTMLButtonElement;
-const exportDirPngBtn = document.getElementById("export-dir-png-btn") as HTMLButtonElement;
+const exportWindPngBtn = document.getElementById("export-wind-png-btn") as HTMLButtonElement;
+const exportTempPressPngBtn = document.getElementById("export-temp-press-png-btn") as HTMLButtonElement;
 const exportWeatherCsvBtn = document.getElementById("export-weather-csv-btn") as HTMLButtonElement;
 const exportAnalogsCsvBtn = document.getElementById("export-analogs-csv-btn") as HTMLButtonElement;
 
@@ -249,8 +249,8 @@ historyList.addEventListener("click", async (e) => {
     const histSource = chartSource ?? weatherRecords[0]?.source;
     if (weatherRecords.length > 0) {
       chartsSection.hidden = false;
-      renderWindSpeedChart(speedChartEl, weatherRecords, histSource);
-      renderWindDirectionChart(dirChartEl, weatherRecords, histSource);
+      renderWindOverlayChart(windOverlayEl, weatherRecords, histSource);
+      renderTempPressureChart(tempPressureEl, weatherRecords, histSource);
     }
 
     renderHourlyTable(hourlyTable, weatherRecords);
@@ -313,8 +313,8 @@ analysisForm.addEventListener("submit", async (e) => {
     const source = chartSource ?? weatherRecords[0]?.source;
     if (weatherRecords.length > 0) {
       chartsSection.hidden = false;
-      renderWindSpeedChart(speedChartEl, weatherRecords, source);
-      renderWindDirectionChart(dirChartEl, weatherRecords, source);
+      renderWindOverlayChart(windOverlayEl, weatherRecords, source);
+      renderTempPressureChart(tempPressureEl, weatherRecords, source);
     }
 
     // Hourly table
@@ -346,12 +346,12 @@ exportJsonBtn.addEventListener("click", () => {
   if (currentRunId != null) downloadAnalysisJson(currentRunId, currentTargetDate);
 });
 
-exportSpeedPngBtn.addEventListener("click", () => {
-  downloadWindSpeedChart(currentTargetDate);
+exportWindPngBtn.addEventListener("click", () => {
+  downloadWindOverlayChart(currentTargetDate);
 });
 
-exportDirPngBtn.addEventListener("click", () => {
-  downloadWindDirectionChart(currentTargetDate);
+exportTempPressPngBtn.addEventListener("click", () => {
+  downloadTempPressureChart(currentTargetDate);
 });
 
 exportWeatherCsvBtn.addEventListener("click", () => {
