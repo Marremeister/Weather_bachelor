@@ -270,6 +270,9 @@ def export_analysis_json(
                 "pressure_hpa": r.pressure,
                 "cloud_cover_pct": r.cloud_cover,
                 "source": r.source,
+                "model_run_time": r.model_run_time.isoformat() if r.model_run_time else None,
+                "forecast_hour": r.forecast_hour,
+                "model_name": r.model_name,
             }
             for r in records
         ],

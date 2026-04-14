@@ -24,6 +24,11 @@ class WeatherRecord(Base):
     temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
     pressure: Mapped[float | None] = mapped_column(Float, nullable=True)
     cloud_cover: Mapped[float | None] = mapped_column(Float, nullable=True)
+    model_run_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    forecast_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    model_name: Mapped[str | None] = mapped_column(String(63), nullable=True)
     raw_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

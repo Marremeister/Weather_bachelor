@@ -25,3 +25,8 @@ Thumbs.db
 
 # Docker
 pgdata/
+
+# GRIB data
+*.grib
+*.grib2
+*.idx

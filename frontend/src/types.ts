@@ -24,6 +24,9 @@ export interface WeatherRecord {
   temperature: number | null;
   pressure: number | null;
   cloud_cover: number | null;
+  model_run_time: string | null;
+  forecast_hour: number | null;
+  model_name: string | null;
 }
 
 export interface WeatherFetchResponse {

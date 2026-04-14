@@ -23,6 +23,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://postgres:postgres@postgres:5432/seabreeze}
       APP_ENV: ${APP_ENV:-development}
       WEATHER_CACHE_DIR: /data/cache
+      GRIB_CACHE_DIR: /data/grib_cache
     volumes:
       - ./backend:/app
       - ./data:/data

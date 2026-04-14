@@ -51,6 +51,20 @@ export function renderSummaryPanel(
     </div>
     ${run.summary ? `<p style="margin-top: 0.75rem; color: #495057;">${escapeHtml(run.summary)}</p>` : ""}
   `;
+
+  // Show model run info as a dedicated item for forecast mode
+  if (mode === "forecast" && run.summary && run.summary.startsWith("GFS model run:")) {
+    const grid = container.querySelector(".summary-grid");
+    if (grid) {
+      const item = document.createElement("div");
+      item.className = "summary-item";
+      item.innerHTML = `
+        <span class="label">Model Run</span>
+        <span class="value">${escapeHtml(run.summary.replace("GFS model run: ", ""))}</span>
+      `;
+      grid.appendChild(item);
+    }
+  }
 }
 
 export function renderHourlyTable(

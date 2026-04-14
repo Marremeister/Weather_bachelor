@@ -12,6 +12,9 @@ class HourlyRecord:
     temperature: float | None
     pressure: float | None
     cloud_cover: float | None
+    model_run_time: datetime | None = None
+    forecast_hour: int | None = None
+    model_name: str | None = None
 
 
 @dataclass

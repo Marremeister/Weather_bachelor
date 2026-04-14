@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 from datetime import date, datetime, time
@@ -15,6 +17,26 @@ from app.services.open_meteo_provider import parse_open_meteo_response
 from app.services.weather_provider import HourlyRecord, WeatherProvider
 
 logger = logging.getLogger(__name__)
+
+# Sources whose filesystem cache uses Open-Meteo JSON format
+_OPEN_METEO_JSON_SOURCES = {"open_meteo", "open_meteo_forecast", "gfs_open_meteo"}
+
+
+def get_provider(source_name: str) -> WeatherProvider:
+    """Registry mapping source names to provider instances."""
+    from app.services.open_meteo_provider import OpenMeteoForecastProvider, OpenMeteoProvider
+
+    if source_name == "open_meteo":
+        return OpenMeteoProvider()
+    if source_name == "open_meteo_forecast":
+        return OpenMeteoForecastProvider()
+    if source_name == "gfs":
+        from app.services.gfs_forecast_provider import GfsForecastProvider
+        return GfsForecastProvider()
+    if source_name == "gfs_open_meteo":
+        from app.services.gfs_open_meteo_provider import GfsOpenMeteoProvider
+        return GfsOpenMeteoProvider()
+    raise ValueError(f"Unknown weather source: {source_name!r}")
 
 
 def _cache_path(source: str, lat: float, lng: float, start: date, end: date) -> Path:
@@ -48,13 +70,16 @@ def _upsert_records(
             "temperature": r.temperature,
             "pressure": r.pressure,
             "cloud_cover": r.cloud_cover,
+            "model_run_time": r.model_run_time,
+            "forecast_hour": r.forecast_hour,
+            "model_name": r.model_name,
             "raw_payload": None,
         }
         for r in records
     ]
     # PostgreSQL limits bind parameters to 65,535 per query.
-    # Each row has 10 columns, so batch at 5,000 rows to stay well under.
-    batch_size = 5000
+    # Each row has 14 columns, so batch at 4,000 rows to stay well under.
+    batch_size = 4000
     for i in range(0, len(rows), batch_size):
         batch = rows[i : i + batch_size]
         stmt = (
@@ -114,17 +139,18 @@ def fetch_weather(
         logger.info("Postgres cache hit: %d records for %s", existing, location.name)
         return existing, True
 
-    # Tier 2: Check filesystem cache
-    cache_file = _cache_path(
-        source, location.latitude, location.longitude, start_date, end_date
-    )
-    if cache_file.exists():
-        logger.info("Filesystem cache hit: %s", cache_file)
-        raw = json.loads(cache_file.read_text())
-        records = parse_open_meteo_response(raw, location.timezone)
-        _upsert_records(db, location.id, source, records)
-        count = _count_existing(db, location.id, source, start_date, end_date)
-        return count, True
+    # Tier 2: Check filesystem cache (only for Open-Meteo JSON sources)
+    if source in _OPEN_METEO_JSON_SOURCES:
+        cache_file = _cache_path(
+            source, location.latitude, location.longitude, start_date, end_date
+        )
+        if cache_file.exists():
+            logger.info("Filesystem cache hit: %s", cache_file)
+            raw = json.loads(cache_file.read_text())
+            records = parse_open_meteo_response(raw, location.timezone)
+            _upsert_records(db, location.id, source, records)
+            count = _count_existing(db, location.id, source, start_date, end_date)
+            return count, True
 
     # Tier 3: Fetch from API
     logger.info(
@@ -142,9 +168,13 @@ def fetch_weather(
         timezone=location.timezone,
     )
 
-    # Write raw JSON to filesystem cache
-    cache_file.parent.mkdir(parents=True, exist_ok=True)
-    cache_file.write_text(json.dumps(result.raw_payload))
+    # Write raw JSON to filesystem cache (only for Open-Meteo JSON sources)
+    if source in _OPEN_METEO_JSON_SOURCES:
+        cache_file = _cache_path(
+            source, location.latitude, location.longitude, start_date, end_date
+        )
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(json.dumps(result.raw_payload))
 
     # Upsert into Postgres
     _upsert_records(db, location.id, source, result.records)

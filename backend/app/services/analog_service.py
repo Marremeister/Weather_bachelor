@@ -11,15 +11,15 @@ import numpy as np
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.analysis_run import AnalysisRun
 from app.models.analog_result import AnalogResult
 from app.models.weather_record import WeatherRecord
 from app.schemas.analog import AnalogCandidate
 from app.schemas.features import AnalysisWindow, DailyFeatures
 from app.services.feature_service import compute_daily_features
-from app.services.open_meteo_provider import OpenMeteoForecastProvider, OpenMeteoProvider
 from app.services.weather_provider import WeatherProvider
-from app.services.weather_service import fetch_weather
+from app.services.weather_service import fetch_weather, get_provider
 
 logger = logging.getLogger(__name__)
 
@@ -221,10 +221,11 @@ def run_analog_analysis(
 
     Returns the AnalysisRun ORM object.
     """
-    hist_provider = OpenMeteoProvider()
-    target_provider: WeatherProvider = (
-        OpenMeteoForecastProvider() if mode == "forecast" else hist_provider
-    )
+    hist_provider = get_provider(historical_source or "open_meteo")
+    if mode == "forecast":
+        target_provider: WeatherProvider = get_provider(forecast_source or "gfs")
+    else:
+        target_provider = hist_provider
 
     run = AnalysisRun(
         location_id=location.id,
@@ -251,36 +252,100 @@ def run_analog_analysis(
                 chunk_start, chunk_end, count, cached,
             )
 
-        # -- Fetch target date weather --
-        t_count, t_cached = fetch_weather(db, target_provider, location, target_date, target_date)
+        # -- Fetch target date weather (with GFS fallback) --
+        try:
+            t_count, t_cached = fetch_weather(db, target_provider, location, target_date, target_date)
+        except Exception as exc:
+            if (
+                mode == "forecast"
+                and target_provider.source_name == "gfs"
+                and settings.gfs_fallback_to_open_meteo
+            ):
+                logger.warning(
+                    "GFS fetch failed, falling back to gfs_open_meteo: %s", exc
+                )
+                target_provider = get_provider("gfs_open_meteo")
+                run.forecast_source = target_provider.source_name
+                t_count, t_cached = fetch_weather(
+                    db, target_provider, location, target_date, target_date
+                )
+            else:
+                raise
         logger.info("Target %s: %d records (cached=%s)", target_date, t_count, t_cached)
 
         # -- Load weather records from DB for the full date range --
-        all_start = min(hist_start, target_date)
-        all_end = max(hist_end, target_date)
-        start_dt = datetime.combine(all_start, time.min)
-        end_dt = datetime.combine(all_end, time(23, 59, 59))
-
-        records = (
-            db.execute(
-                select(WeatherRecord)
-                .where(
-                    WeatherRecord.location_id == location.id,
-                    WeatherRecord.valid_time_local >= start_dt,
-                    WeatherRecord.valid_time_local <= end_dt,
-                )
-                .order_by(WeatherRecord.valid_time_local)
-            )
-            .scalars()
-            .all()
-        )
-
-        # -- Group records by date --
+        # When forecast mode uses a different provider, load target and
+        # historical records separately to avoid mixing sources.
         from collections import defaultdict
 
         by_date: dict[date, list] = defaultdict(list)
-        for rec in records:
-            by_date[rec.valid_time_local.date()].append(rec)
+
+        use_separate_sources = (
+            mode == "forecast"
+            and target_provider.source_name != hist_provider.source_name
+        )
+
+        if use_separate_sources:
+            # Historical records
+            hist_start_dt = datetime.combine(hist_start, time.min)
+            hist_end_dt = datetime.combine(hist_end, time(23, 59, 59))
+            hist_records = (
+                db.execute(
+                    select(WeatherRecord)
+                    .where(
+                        WeatherRecord.location_id == location.id,
+                        WeatherRecord.source == hist_provider.source_name,
+                        WeatherRecord.valid_time_local >= hist_start_dt,
+                        WeatherRecord.valid_time_local <= hist_end_dt,
+                    )
+                    .order_by(WeatherRecord.valid_time_local)
+                )
+                .scalars()
+                .all()
+            )
+            for rec in hist_records:
+                by_date[rec.valid_time_local.date()].append(rec)
+
+            # Target records
+            target_start_dt = datetime.combine(target_date, time.min)
+            target_end_dt = datetime.combine(target_date, time(23, 59, 59))
+            target_records = (
+                db.execute(
+                    select(WeatherRecord)
+                    .where(
+                        WeatherRecord.location_id == location.id,
+                        WeatherRecord.source == target_provider.source_name,
+                        WeatherRecord.valid_time_local >= target_start_dt,
+                        WeatherRecord.valid_time_local <= target_end_dt,
+                    )
+                    .order_by(WeatherRecord.valid_time_local)
+                )
+                .scalars()
+                .all()
+            )
+            for rec in target_records:
+                by_date[rec.valid_time_local.date()].append(rec)
+        else:
+            all_start = min(hist_start, target_date)
+            all_end = max(hist_end, target_date)
+            start_dt = datetime.combine(all_start, time.min)
+            end_dt = datetime.combine(all_end, time(23, 59, 59))
+
+            records = (
+                db.execute(
+                    select(WeatherRecord)
+                    .where(
+                        WeatherRecord.location_id == location.id,
+                        WeatherRecord.valid_time_local >= start_dt,
+                        WeatherRecord.valid_time_local <= end_dt,
+                    )
+                    .order_by(WeatherRecord.valid_time_local)
+                )
+                .scalars()
+                .all()
+            )
+            for rec in records:
+                by_date[rec.valid_time_local.date()].append(rec)
 
         # -- Compute DailyFeatures per day --
         historical_features: list[DailyFeatures] = []
@@ -324,6 +389,24 @@ def run_analog_analysis(
 
         run.status = "completed"
         run.finished_at = datetime.now(tz=ZoneInfo("UTC"))
+
+        # Add model run metadata to summary for forecast mode
+        if mode == "forecast":
+            target_day_records = by_date.get(target_date, [])
+            model_run_times = [
+                r.model_run_time for r in target_day_records
+                if hasattr(r, "model_run_time") and r.model_run_time is not None
+            ]
+            if model_run_times:
+                mrt = model_run_times[0]
+                mrt_str = mrt.isoformat() if hasattr(mrt, "isoformat") else str(mrt)
+                model_names = {
+                    r.model_name for r in target_day_records
+                    if hasattr(r, "model_name") and r.model_name
+                }
+                model_str = ", ".join(sorted(model_names)) if model_names else "unknown"
+                run.summary = f"GFS model run: {mrt_str} ({model_str})"
+
         db.commit()
         db.refresh(run)
         return run

@@ -11,8 +11,7 @@ from app.schemas.weather import (
     WeatherFetchResponse,
     WeatherRecordResponse,
 )
-from app.services.open_meteo_provider import OpenMeteoProvider
-from app.services.weather_service import fetch_weather
+from app.services.weather_service import fetch_weather, get_provider
 
 router = APIRouter(prefix="/api/weather", tags=["weather"])
 
@@ -27,7 +26,7 @@ def trigger_fetch(req: WeatherFetchRequest, db: Session = Depends(get_db)):
             status_code=400, detail="start_date must be <= end_date"
         )
 
-    provider = OpenMeteoProvider()
+    provider = get_provider(req.source)
     count, cached = fetch_weather(db, provider, location, req.start_date, req.end_date)
 
     return WeatherFetchResponse(
