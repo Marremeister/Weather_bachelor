@@ -52,14 +52,19 @@ def _upsert_records(
         }
         for r in records
     ]
-    stmt = (
-        insert(WeatherRecord)
-        .values(rows)
-        .on_conflict_do_nothing(
-            index_elements=["location_id", "source", "valid_time_utc"]
+    # PostgreSQL limits bind parameters to 65,535 per query.
+    # Each row has 10 columns, so batch at 5,000 rows to stay well under.
+    batch_size = 5000
+    for i in range(0, len(rows), batch_size):
+        batch = rows[i : i + batch_size]
+        stmt = (
+            insert(WeatherRecord)
+            .values(batch)
+            .on_conflict_do_nothing(
+                index_elements=["location_id", "source", "valid_time_utc"]
+            )
         )
-    )
-    db.execute(stmt)
+        db.execute(stmt)
     db.commit()
     return len(records)
 
