@@ -107,6 +107,38 @@ body {
   background: #1c7ed6;
 }
 
+/* Mode Selector */
+
+.mode-selector {
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.mode-selector legend {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #495057;
+  padding: 0 0.25rem;
+}
+
+.mode-selector label {
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.mode-info {
+  font-size: 0.8rem;
+  color: #868e96;
+  margin-top: 0.25rem;
+}
+
 /* Analysis Form */
 
 .analysis-form {
@@ -202,6 +234,16 @@ body {
 }
 
 .status-badge.running {
+  background: #fff3bf;
+  color: #e67700;
+}
+
+.status-badge.historical {
+  background: #d0ebff;
+  color: #1864ab;
+}
+
+.status-badge.forecast {
   background: #fff3bf;
   color: #e67700;
 }

@@ -11,6 +11,9 @@ class AnalysisRequest(BaseModel):
     historical_start_date: date
     historical_end_date: date
     top_n: int = Field(default=10, ge=1, le=50)
+    mode: str = "historical"
+    forecast_source: str | None = None
+    historical_source: str | None = None
 
 
 class AnalogCandidate(BaseModel):
@@ -47,6 +50,9 @@ class AnalysisRunResponse(BaseModel):
     historical_start_date: date | None
     historical_end_date: date | None
     top_n: int | None
+    mode: str | None = None
+    forecast_source: str | None = None
+    historical_source: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -204,6 +204,9 @@ def run_analog_analysis(
     hist_end: date,
     top_n: int = 10,
     window: AnalysisWindow | None = None,
+    mode: str = "historical",
+    forecast_source: str | None = None,
+    historical_source: str | None = None,
 ) -> AnalysisRun:
     """Execute the full analog matching lifecycle.
 
@@ -217,6 +220,8 @@ def run_analog_analysis(
 
     Returns the AnalysisRun ORM object.
     """
+    provider = OpenMeteoProvider()
+
     run = AnalysisRun(
         location_id=location.id,
         target_date=target_date,
@@ -225,14 +230,15 @@ def run_analog_analysis(
         historical_start_date=hist_start,
         historical_end_date=hist_end,
         top_n=top_n,
+        mode=mode,
+        forecast_source=forecast_source or provider.source_name,
+        historical_source=historical_source or provider.source_name,
     )
     db.add(run)
     db.commit()
     db.refresh(run)
 
     try:
-        provider = OpenMeteoProvider()
-
         # -- Fetch historical weather in yearly chunks --
         for chunk_start, chunk_end in yearly_chunks(hist_start, hist_end):
             count, cached = fetch_weather(db, provider, location, chunk_start, chunk_end)

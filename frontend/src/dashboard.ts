@@ -12,11 +12,21 @@ export function renderSummaryPanel(
     duration = ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
   }
 
+  const mode = run.mode ?? "historical";
+  const modeLabel = mode === "forecast" ? "Forecast" : "Historical";
+  const dataSource = mode === "forecast"
+    ? `Forecast: ${run.forecast_source ?? "open_meteo"} / Historical: ${run.historical_source ?? "open_meteo"}`
+    : run.historical_source ?? "open_meteo";
+
   container.innerHTML = `
     <div class="summary-grid">
       <div class="summary-item">
         <span class="label">Status</span>
         <span class="value"><span class="status-badge ${statusClass}">${run.status}</span></span>
+      </div>
+      <div class="summary-item">
+        <span class="label">Mode</span>
+        <span class="value"><span class="status-badge ${mode}">${modeLabel}</span></span>
       </div>
       <div class="summary-item">
         <span class="label">Target Date</span>
@@ -25,6 +35,10 @@ export function renderSummaryPanel(
       <div class="summary-item">
         <span class="label">Historical Range</span>
         <span class="value">${run.historical_start_date ?? "—"} to ${run.historical_end_date ?? "—"}</span>
+      </div>
+      <div class="summary-item">
+        <span class="label">Data Source</span>
+        <span class="value">${escapeHtml(dataSource)}</span>
       </div>
       <div class="summary-item">
         <span class="label">Analog Days</span>
@@ -50,8 +64,11 @@ export function renderHourlyTable(
     return;
   }
 
+  const sourceLabel = records[0]?.source ? `Source: ${records[0].source}` : "";
+
   const headerRow = `
     <thead>
+      ${sourceLabel ? `<tr><th colspan="6" style="text-align:left;font-weight:400;font-size:0.82rem;color:#868e96;padding-bottom:0.4rem;border-bottom:none;">${escapeHtml(sourceLabel)}</th></tr>` : ""}
       <tr>
         <th>Time</th>
         <th class="num">Wind Speed (m/s)</th>

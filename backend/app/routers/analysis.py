@@ -53,6 +53,12 @@ def trigger_analysis(
             detail="historical_end_date must be after historical_start_date",
         )
 
+    if request.mode not in ("historical", "forecast"):
+        raise HTTPException(
+            status_code=400,
+            detail="mode must be 'historical' or 'forecast'",
+        )
+
     run = run_analog_analysis(
         db=db,
         location=location,
@@ -60,6 +66,9 @@ def trigger_analysis(
         hist_start=request.historical_start_date,
         hist_end=request.historical_end_date,
         top_n=request.top_n,
+        mode=request.mode,
+        forecast_source=request.forecast_source,
+        historical_source=request.historical_source,
     )
 
     analogs = (
@@ -154,6 +163,7 @@ def export_weather_csv(
     writer.writerow([
         "valid_time_utc", "valid_time_local", "wind_speed_ms",
         "wind_direction_deg", "temperature_c", "pressure_hpa", "cloud_cover_pct",
+        "source",
     ])
     for r in records:
         writer.writerow([
@@ -161,6 +171,7 @@ def export_weather_csv(
             r.valid_time_local.isoformat() if r.valid_time_local else "",
             r.true_wind_speed, r.true_wind_direction,
             r.temperature, r.pressure, r.cloud_cover,
+            r.source,
         ])
 
     filename = f"weather_{run.target_date.isoformat()}.csv"
@@ -258,6 +269,7 @@ def export_analysis_json(
                 "temperature_c": r.temperature,
                 "pressure_hpa": r.pressure,
                 "cloud_cover_pct": r.cloud_cover,
+                "source": r.source,
             }
             for r in records
         ],
@@ -283,5 +295,8 @@ def _run_dict(run: AnalysisRun) -> dict:
         "historical_start_date": run.historical_start_date,
         "historical_end_date": run.historical_end_date,
         "top_n": run.top_n,
+        "mode": run.mode,
+        "forecast_source": run.forecast_source,
+        "historical_source": run.historical_source,
         "created_at": run.created_at,
     }

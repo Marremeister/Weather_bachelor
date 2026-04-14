@@ -66,6 +66,7 @@ const classificationResultEl = document.getElementById("classification-result")!
 let locations: Location[] = [];
 let currentRunId: number | null = null;
 let currentTargetDate = "";
+let currentMode: "historical" | "forecast" = "historical";
 
 // --- Init ---
 
@@ -150,6 +151,43 @@ function setDefaultDates() {
   histEndInput.value = `${endYear}-09-30`;
 }
 
+// --- Mode toggle ---
+
+const modeSelector = document.getElementById("mode-selector")!;
+const modeInfoEl = document.createElement("div");
+modeInfoEl.className = "mode-info";
+modeSelector.appendChild(modeInfoEl);
+
+function applyMode(mode: "historical" | "forecast") {
+  currentMode = mode;
+  const radio = modeSelector.querySelector<HTMLInputElement>(`input[value="${mode}"]`);
+  if (radio) radio.checked = true;
+
+  if (mode === "forecast") {
+    // Allow future dates
+    targetDateInput.removeAttribute("max");
+    // Lock historical range to library defaults
+    histStartInput.value = "2015-05-01";
+    histEndInput.value = "2024-09-30";
+    histStartInput.readOnly = true;
+    histEndInput.readOnly = true;
+    modeInfoEl.textContent = "Historical range auto-set to ERA5 library";
+  } else {
+    // Restrict to today
+    targetDateInput.max = new Date().toISOString().slice(0, 10);
+    histStartInput.readOnly = false;
+    histEndInput.readOnly = false;
+    modeInfoEl.textContent = "";
+  }
+}
+
+modeSelector.addEventListener("change", (e) => {
+  const target = e.target as HTMLInputElement;
+  if (target.name === "mode") {
+    applyMode(target.value as "historical" | "forecast");
+  }
+});
+
 // --- History ---
 
 async function loadHistory() {
@@ -162,7 +200,7 @@ async function loadHistory() {
     historyList.innerHTML = runs
       .map(
         (run) => `
-        <div class="history-item" data-run-id="${run.id}" data-location-id="${run.location_id}" data-target-date="${run.target_date}" data-hist-start="${run.historical_start_date ?? ""}" data-hist-end="${run.historical_end_date ?? ""}" data-top-n="${run.top_n ?? 10}">
+        <div class="history-item" data-run-id="${run.id}" data-location-id="${run.location_id}" data-target-date="${run.target_date}" data-hist-start="${run.historical_start_date ?? ""}" data-hist-end="${run.historical_end_date ?? ""}" data-top-n="${run.top_n ?? 10}" data-mode="${run.mode ?? "historical"}">
           <span class="hi-date">${run.target_date}</span>
           <span class="hi-meta">${run.status} &middot; ${run.historical_start_date ?? "?"} to ${run.historical_end_date ?? "?"}</span>
         </div>
@@ -184,8 +222,10 @@ historyList.addEventListener("click", async (e) => {
   const histStart = item.dataset.histStart!;
   const histEnd = item.dataset.histEnd!;
   const topN = item.dataset.topN!;
+  const mode = (item.dataset.mode ?? "historical") as "historical" | "forecast";
 
   // Restore form fields
+  applyMode(mode);
   locationSelect.value = String(locationId);
   targetDateInput.value = targetDate;
   if (histStart) histStartInput.value = histStart;
@@ -205,10 +245,11 @@ historyList.addEventListener("click", async (e) => {
     renderSummaryPanel(summaryPanel, analysisRun);
     summarySection.hidden = false;
 
+    const histSource = weatherRecords[0]?.source;
     if (weatherRecords.length > 0) {
       chartsSection.hidden = false;
-      renderWindSpeedChart(speedChartEl, weatherRecords);
-      renderWindDirectionChart(dirChartEl, weatherRecords);
+      renderWindSpeedChart(speedChartEl, weatherRecords, histSource);
+      renderWindDirectionChart(dirChartEl, weatherRecords, histSource);
     }
 
     renderHourlyTable(hourlyTable, weatherRecords);
@@ -251,6 +292,9 @@ analysisForm.addEventListener("submit", async (e) => {
       historical_start_date: histStartInput.value,
       historical_end_date: histEndInput.value,
       top_n: Number(topNInput.value),
+      mode: currentMode,
+      forecast_source: currentMode === "forecast" ? "open_meteo" : undefined,
+      historical_source: currentMode === "forecast" ? "open_meteo" : undefined,
     });
     const weatherRecords = await getWeatherRecords(
       locationId, targetDateInput.value, targetDateInput.value,
@@ -264,10 +308,11 @@ analysisForm.addEventListener("submit", async (e) => {
     summarySection.hidden = false;
 
     // Charts
+    const source = weatherRecords[0]?.source;
     if (weatherRecords.length > 0) {
       chartsSection.hidden = false;
-      renderWindSpeedChart(speedChartEl, weatherRecords);
-      renderWindDirectionChart(dirChartEl, weatherRecords);
+      renderWindSpeedChart(speedChartEl, weatherRecords, source);
+      renderWindDirectionChart(dirChartEl, weatherRecords, source);
     }
 
     // Hourly table

@@ -47,6 +47,9 @@ export interface AnalysisRequest {
   historical_start_date: string;
   historical_end_date: string;
   top_n: number;
+  mode?: string;
+  forecast_source?: string;
+  historical_source?: string;
 }
 
 export interface AnalogResult {
@@ -71,6 +74,9 @@ export interface AnalysisRunSummary {
   historical_start_date: string | null;
   historical_end_date: string | null;
   top_n: number | null;
+  mode: string | null;
+  forecast_source: string | null;
+  historical_source: string | null;
   created_at: string;
 }
 
@@ -85,6 +91,9 @@ export interface AnalysisRunDetail {
   historical_start_date: string | null;
   historical_end_date: string | null;
   top_n: number | null;
+  mode: string | null;
+  forecast_source: string | null;
+  historical_source: string | null;
   created_at: string;
   analogs: AnalogResult[];
 }

@@ -26,6 +26,9 @@ class AnalysisRun(Base):
     historical_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     historical_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     top_n: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    mode: Mapped[str | None] = mapped_column(String(31), nullable=True)
+    forecast_source: Mapped[str | None] = mapped_column(String(63), nullable=True)
+    historical_source: Mapped[str | None] = mapped_column(String(63), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

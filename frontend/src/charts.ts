@@ -2,6 +2,7 @@ import { use, init, type ECharts } from "echarts/core";
 import { LineChart, ScatterChart } from "echarts/charts";
 import {
   GridComponent,
+  TitleComponent,
   TooltipComponent,
   DataZoomComponent,
 } from "echarts/components";
@@ -12,6 +13,7 @@ use([
   LineChart,
   ScatterChart,
   GridComponent,
+  TitleComponent,
   TooltipComponent,
   DataZoomComponent,
   CanvasRenderer,
@@ -23,6 +25,7 @@ let directionChart: ECharts | null = null;
 export function renderWindSpeedChart(
   container: HTMLElement,
   records: WeatherRecord[],
+  source?: string,
 ): void {
   if (speedChart) {
     speedChart.dispose();
@@ -36,6 +39,13 @@ export function renderWindSpeedChart(
   const speeds = records.map((r) => r.true_wind_speed);
 
   speedChart.setOption({
+    title: source
+      ? {
+          subtext: `Source: ${source}`,
+          subtextStyle: { fontSize: 11, color: "#868e96" },
+          left: "center",
+        }
+      : undefined,
     tooltip: {
       trigger: "axis",
       formatter(params: unknown) {
@@ -44,7 +54,7 @@ export function renderWindSpeedChart(
         return `${p.axisValueLabel}<br/>Wind speed: ${val}`;
       },
     },
-    grid: { left: 50, right: 20, top: 20, bottom: 50 },
+    grid: { left: 50, right: 20, top: source ? 35 : 20, bottom: 50 },
     xAxis: {
       type: "category",
       data: times,
@@ -74,6 +84,7 @@ export function renderWindSpeedChart(
 export function renderWindDirectionChart(
   container: HTMLElement,
   records: WeatherRecord[],
+  source?: string,
 ): void {
   if (directionChart) {
     directionChart.dispose();
@@ -90,6 +101,13 @@ export function renderWindDirectionChart(
   });
 
   directionChart.setOption({
+    title: source
+      ? {
+          subtext: `Source: ${source}`,
+          subtextStyle: { fontSize: 11, color: "#868e96" },
+          left: "center",
+        }
+      : undefined,
     tooltip: {
       trigger: "item",
       formatter(params: unknown) {
@@ -99,7 +117,7 @@ export function renderWindDirectionChart(
         return `${times[idx]}<br/>Direction: ${deg}°`;
       },
     },
-    grid: { left: 50, right: 20, top: 20, bottom: 50 },
+    grid: { left: 50, right: 20, top: source ? 35 : 20, bottom: 50 },
     xAxis: {
       type: "category",
       data: times,
