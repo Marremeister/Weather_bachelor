@@ -1,4 +1,4 @@
-import type { HealthResponse, Location, SeaBreezeClassification, WeatherFetchResponse, WeatherRecord } from "./types";
+import type { AnalysisRequest, AnalysisRunDetail, AnalogResult, HealthResponse, Location, SeaBreezeClassification, WeatherFetchResponse, WeatherRecord } from "./types";
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch("/api/health");
@@ -66,4 +66,38 @@ export async function fetchClassification(
     throw new Error(`Classification fetch failed: ${res.status}`);
   }
   return res.json() as Promise<SeaBreezeClassification>;
+}
+
+export async function runAnalysis(
+  request: AnalysisRequest,
+): Promise<AnalysisRunDetail> {
+  const res = await fetch("/api/analysis/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) {
+    throw new Error(`Analysis run failed: ${res.status}`);
+  }
+  return res.json() as Promise<AnalysisRunDetail>;
+}
+
+export async function getAnalysisRun(
+  runId: number,
+): Promise<AnalysisRunDetail> {
+  const res = await fetch(`/api/analysis/${runId}`);
+  if (!res.ok) {
+    throw new Error(`Analysis run fetch failed: ${res.status}`);
+  }
+  return res.json() as Promise<AnalysisRunDetail>;
+}
+
+export async function getAnalysisAnalogs(
+  runId: number,
+): Promise<AnalogResult[]> {
+  const res = await fetch(`/api/analysis/${runId}/analogs`);
+  if (!res.ok) {
+    throw new Error(`Analysis analogs fetch failed: ${res.status}`);
+  }
+  return res.json() as Promise<AnalogResult[]>;
 }

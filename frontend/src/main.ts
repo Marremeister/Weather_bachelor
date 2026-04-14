@@ -1,21 +1,61 @@
-import { fetchClassification, fetchHealth, fetchLocations } from "./api";
-import type { SeaBreezeClassification } from "./types";
+import {
+  fetchClassification,
+  fetchHealth,
+  fetchLocations,
+  getWeatherRecords,
+  runAnalysis,
+} from "./api";
+import { renderWindSpeedChart, renderWindDirectionChart } from "./charts";
+import {
+  renderSummaryPanel,
+  renderHourlyTable,
+  renderAnalogTable,
+} from "./dashboard";
+import type { Location, SeaBreezeClassification } from "./types";
 import "./styles.css";
 
-const statusEl = document.getElementById("health-status")!;
+// --- DOM refs ---
+const healthIndicator = document.getElementById("health-indicator")!;
+const locationSelect = document.getElementById("location-select") as HTMLSelectElement;
+const targetDateInput = document.getElementById("target-date") as HTMLInputElement;
+const histStartInput = document.getElementById("hist-start") as HTMLInputElement;
+const histEndInput = document.getElementById("hist-end") as HTMLInputElement;
+const topNInput = document.getElementById("top-n") as HTMLInputElement;
+const analysisForm = document.getElementById("analysis-form") as HTMLFormElement;
+const runBtn = document.getElementById("run-btn") as HTMLButtonElement;
+const analysisError = document.getElementById("analysis-error")!;
+
+const summarySection = document.getElementById("summary-section")!;
+const summaryPanel = document.getElementById("summary-panel")!;
+const chartsSection = document.getElementById("charts-section")!;
+const speedChartEl = document.getElementById("wind-speed-chart")!;
+const dirChartEl = document.getElementById("wind-direction-chart")!;
+const hourlySection = document.getElementById("hourly-section")!;
+const hourlyTable = document.getElementById("hourly-table")!;
+const analogSection = document.getElementById("analog-section")!;
+const analogTable = document.getElementById("analog-table")!;
+
+// Legacy
+const healthStatusEl = document.getElementById("health-status")!;
 const locationsEl = document.getElementById("locations")!;
 const classifyBtn = document.getElementById("classify-btn")!;
 const classifyDateInput = document.getElementById("classify-date") as HTMLInputElement;
 const classificationResultEl = document.getElementById("classification-result")!;
 
-async function renderHealth() {
+// --- Store ---
+let locations: Location[] = [];
+
+// --- Init ---
+
+async function initHealth() {
   try {
     const data = await fetchHealth();
+    healthIndicator.textContent = data.status === "healthy" ? "API healthy" : `API ${data.status}`;
+    healthIndicator.className = `health-indicator ${data.status === "healthy" ? "healthy" : "error"}`;
 
-    const cssClass =
-      data.status === "healthy" ? "status-healthy" : "status-degraded";
-
-    statusEl.innerHTML = `
+    // Legacy detailed view
+    const cssClass = data.status === "healthy" ? "status-healthy" : "status-degraded";
+    healthStatusEl.innerHTML = `
       <div class="status-row">
         <span class="status-label">API</span>
         <span class="${cssClass}">${data.status}</span>
@@ -30,44 +70,123 @@ async function renderHealth() {
       </div>
     `;
   } catch {
-    statusEl.innerHTML = `
-      <p class="status-error">Could not reach backend.</p>
-    `;
+    healthIndicator.textContent = "API unreachable";
+    healthIndicator.className = "health-indicator error";
+    healthStatusEl.innerHTML = `<p class="status-error">Could not reach backend.</p>`;
   }
 }
 
-async function renderLocations() {
+async function initLocations() {
   try {
-    const locations = await fetchLocations();
+    locations = await fetchLocations();
 
+    // Populate dropdown
     if (locations.length === 0) {
-      locationsEl.innerHTML = `<p>No locations found.</p>`;
-      return;
+      locationSelect.innerHTML = `<option value="">No locations found</option>`;
+    } else {
+      locationSelect.innerHTML = locations
+        .map((loc) => `<option value="${loc.id}">${loc.name}</option>`)
+        .join("");
     }
 
-    locationsEl.innerHTML = locations
-      .map(
-        (loc) => `
-      <div class="location-card">
-        <div class="location-name">${loc.name}</div>
-        <div class="location-detail">
-          <span class="location-label">Coordinates</span>
-          <span>${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}</span>
+    // Legacy card view
+    if (locations.length === 0) {
+      locationsEl.innerHTML = `<p>No locations found.</p>`;
+    } else {
+      locationsEl.innerHTML = locations
+        .map(
+          (loc) => `
+        <div class="location-card">
+          <div class="location-name">${loc.name}</div>
+          <div class="location-detail">
+            <span class="location-label">Coordinates</span>
+            <span>${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}</span>
+          </div>
+          <div class="location-detail">
+            <span class="location-label">Timezone</span>
+            <span>${loc.timezone}</span>
+          </div>
         </div>
-        <div class="location-detail">
-          <span class="location-label">Timezone</span>
-          <span>${loc.timezone}</span>
-        </div>
-      </div>
-    `,
-      )
-      .join("");
+      `,
+        )
+        .join("");
+    }
   } catch {
-    locationsEl.innerHTML = `
-      <p class="status-error">Could not load locations.</p>
-    `;
+    locationSelect.innerHTML = `<option value="">Failed to load</option>`;
+    locationsEl.innerHTML = `<p class="status-error">Could not load locations.</p>`;
   }
 }
+
+function setDefaultDates() {
+  const today = new Date();
+  targetDateInput.value = today.toISOString().slice(0, 10);
+
+  // Sea breeze season defaults: May 1 five years ago to Sep 30 last year
+  const endYear = today.getFullYear() - 1;
+  const startYear = endYear - 4;
+  histStartInput.value = `${startYear}-05-01`;
+  histEndInput.value = `${endYear}-09-30`;
+}
+
+// --- Analysis ---
+
+analysisForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  analysisError.hidden = true;
+
+  const locationId = Number(locationSelect.value);
+  if (!locationId) {
+    showError("Please select a location.");
+    return;
+  }
+
+  runBtn.disabled = true;
+  runBtn.innerHTML = `<span class="loading-spinner"></span>Running…`;
+
+  try {
+    const [analysisRun, weatherRecords] = await Promise.all([
+      runAnalysis({
+        location_id: locationId,
+        target_date: targetDateInput.value,
+        historical_start_date: histStartInput.value,
+        historical_end_date: histEndInput.value,
+        top_n: Number(topNInput.value),
+      }),
+      getWeatherRecords(locationId, targetDateInput.value, targetDateInput.value),
+    ]);
+
+    // Summary
+    renderSummaryPanel(summaryPanel, analysisRun);
+    summarySection.hidden = false;
+
+    // Charts
+    if (weatherRecords.length > 0) {
+      chartsSection.hidden = false;
+      renderWindSpeedChart(speedChartEl, weatherRecords);
+      renderWindDirectionChart(dirChartEl, weatherRecords);
+    }
+
+    // Hourly table
+    renderHourlyTable(hourlyTable, weatherRecords);
+    hourlySection.hidden = false;
+
+    // Analog table
+    renderAnalogTable(analogTable, analysisRun.analogs);
+    analogSection.hidden = false;
+  } catch (err) {
+    showError(err instanceof Error ? err.message : "Analysis failed.");
+  } finally {
+    runBtn.disabled = false;
+    runBtn.textContent = "Run Analysis";
+  }
+});
+
+function showError(msg: string) {
+  analysisError.textContent = msg;
+  analysisError.hidden = false;
+}
+
+// --- Legacy classification ---
 
 function indicatorLabel(key: string): string {
   const labels: Record<string, string> = {
@@ -117,5 +236,8 @@ classifyBtn.addEventListener("click", async () => {
   }
 });
 
-renderHealth();
-renderLocations();
+// --- Boot ---
+
+initHealth();
+initLocations();
+setDefaultDates();

@@ -3,26 +3,108 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sea Breeze Analog</title>
+    <title>Sea Breeze Analog — Analysis Dashboard</title>
   </head>
   <body>
     <div id="app">
-      <h1>Sea Breeze Analog</h1>
-      <div id="health-status">
-        <p id="status-text">Checking backend status…</p>
-      </div>
-      <h2>Locations</h2>
-      <div id="locations">
-        <p>Loading locations…</p>
-      </div>
+      <header class="app-header">
+        <h1>Sea Breeze Analog</h1>
+        <span id="health-indicator" class="health-indicator">Connecting…</span>
+      </header>
 
-      <h2>Sea Breeze Classification</h2>
-      <div class="classification-form">
-        <label for="classify-date">Date</label>
-        <input type="date" id="classify-date" />
-        <button id="classify-btn">Classify</button>
-      </div>
-      <div id="classification-result"></div>
+      <!-- Analysis Form -->
+      <section class="card" id="analysis-form-section">
+        <h2>Run Analysis</h2>
+        <form id="analysis-form" class="analysis-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="location-select">Location</label>
+              <select id="location-select" required>
+                <option value="">Loading locations…</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="target-date">Target Date</label>
+              <input type="date" id="target-date" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="hist-start">Historical Start</label>
+              <input type="date" id="hist-start" required />
+            </div>
+            <div class="form-group">
+              <label for="hist-end">Historical End</label>
+              <input type="date" id="hist-end" required />
+            </div>
+            <div class="form-group form-group-sm">
+              <label for="top-n">Top N</label>
+              <input type="number" id="top-n" value="10" min="1" max="50" required />
+            </div>
+          </div>
+          <button type="submit" id="run-btn" class="btn-primary">Run Analysis</button>
+        </form>
+        <div id="analysis-error" class="error-msg" hidden></div>
+      </section>
+
+      <!-- Summary Panel -->
+      <section class="card" id="summary-section" hidden>
+        <h2>Analysis Summary</h2>
+        <div id="summary-panel"></div>
+      </section>
+
+      <!-- Charts Row -->
+      <section id="charts-section" class="charts-row" hidden>
+        <div class="card chart-card">
+          <h3>Wind Speed</h3>
+          <div id="wind-speed-chart" class="chart-container"></div>
+        </div>
+        <div class="card chart-card">
+          <h3>Wind Direction</h3>
+          <div id="wind-direction-chart" class="chart-container"></div>
+        </div>
+      </section>
+
+      <!-- Hourly Data Table -->
+      <section class="card" id="hourly-section" hidden>
+        <h2>Hourly Weather Data</h2>
+        <div class="table-scroll">
+          <table id="hourly-table" class="data-table"></table>
+        </div>
+      </section>
+
+      <!-- Analog Days Table -->
+      <section class="card" id="analog-section" hidden>
+        <h2>Analog Days Ranking</h2>
+        <div class="table-scroll">
+          <table id="analog-table" class="data-table"></table>
+        </div>
+      </section>
+
+      <!-- Legacy sections -->
+      <details class="legacy-section">
+        <summary>Health / Locations / Classification</summary>
+
+        <section class="card">
+          <h3>System Health</h3>
+          <div id="health-status"></div>
+        </section>
+
+        <section class="card">
+          <h3>Locations</h3>
+          <div id="locations"></div>
+        </section>
+
+        <section class="card">
+          <h3>Sea Breeze Classification</h3>
+          <div class="classification-form">
+            <label for="classify-date">Date</label>
+            <input type="date" id="classify-date" />
+            <button id="classify-btn" class="btn-secondary">Classify</button>
+          </div>
+          <div id="classification-result"></div>
+        </section>
+      </details>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
