@@ -225,21 +225,30 @@ def get_precomputed_features(
     location_id: int,
     source: str,
     config_hash: str,
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> list[DailyFeatures]:
-    """Load precomputed DailyFeatures from the daily_features table."""
-    rows = (
-        db.execute(
-            select(DailyFeatureRow)
-            .where(
-                DailyFeatureRow.location_id == location_id,
-                DailyFeatureRow.source == source,
-                DailyFeatureRow.feature_config_hash == config_hash,
-            )
-            .order_by(DailyFeatureRow.date)
+    """Load precomputed DailyFeatures from the daily_features table.
+
+    When *start_date* and *end_date* are supplied the query is filtered to
+    that range so callers only receive candidates from the requested
+    historical window.
+    """
+    stmt = (
+        select(DailyFeatureRow)
+        .where(
+            DailyFeatureRow.location_id == location_id,
+            DailyFeatureRow.source == source,
+            DailyFeatureRow.feature_config_hash == config_hash,
         )
-        .scalars()
-        .all()
     )
+    if start_date is not None:
+        stmt = stmt.where(DailyFeatureRow.date >= start_date)
+    if end_date is not None:
+        stmt = stmt.where(DailyFeatureRow.date <= end_date)
+    stmt = stmt.order_by(DailyFeatureRow.date)
+
+    rows = db.execute(stmt).scalars().all()
 
     features: list[DailyFeatures] = []
     for row in rows:

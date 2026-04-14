@@ -32,13 +32,25 @@ logger = logging.getLogger(__name__)
 def calibrate_bias(
     location_id: int,
     overlap_days: int | None = None,
-    forecast_source: str = "gfs",
+    forecast_source: str = "gfs_open_meteo",
     historical_source: str = "era5",
 ) -> None:
     """Compute per-feature bias corrections between two sources.
 
     Runs as a BackgroundTask with its own DB session.
+
+    The default *forecast_source* is ``gfs_open_meteo`` because the live
+    ``gfs`` provider only serves the latest published cycle and cannot
+    retrieve the historical dates needed for calibration overlap.
     """
+    if forecast_source == "gfs":
+        logger.warning(
+            "Bias calibration: 'gfs' provider cannot fetch historical dates; "
+            "switching to 'gfs_open_meteo'.  Pass forecast_source='gfs_open_meteo' "
+            "explicitly to silence this warning."
+        )
+        forecast_source = "gfs_open_meteo"
+
     if overlap_days is None:
         overlap_days = settings.bias_overlap_days
 

@@ -42,12 +42,14 @@ class Era5Provider(WeatherProvider):
     # GRIB caching
     # ------------------------------------------------------------------
 
-    def _grib_cache_path(self, year: int) -> Path:
+    def _grib_cache_path(self, year: int, lat: float, lon: float) -> Path:
         version = settings.era5_data_version
+        lat_r = f"{lat:.2f}"
+        lon_r = f"{lon:.2f}"
         return (
             Path(settings.grib_cache_dir)
             / "era5"
-            / f"era5_point_{year}_{version}.grib"
+            / f"era5_point_{lat_r}_{lon_r}_{year}_{version}.grib"
         )
 
     # ------------------------------------------------------------------
@@ -56,7 +58,7 @@ class Era5Provider(WeatherProvider):
 
     def _download_era5_year(self, year: int, lat: float, lon: float) -> Path:
         """Download ERA5 single-levels for one year from CDS.  Skips if cached."""
-        cache_path = self._grib_cache_path(year)
+        cache_path = self._grib_cache_path(year, lat, lon)
 
         if cache_path.exists() and cache_path.stat().st_size > 0:
             logger.info("ERA5 GRIB cache hit: %s", cache_path)

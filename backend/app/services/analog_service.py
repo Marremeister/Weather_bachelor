@@ -250,7 +250,10 @@ def run_analog_analysis(
             window = AnalysisWindow()
         config_hash = compute_feature_config_hash(window)
         hist_source_name = hist_provider.source_name
-        precomputed = get_precomputed_features(db, location.id, hist_source_name, config_hash)
+        precomputed = get_precomputed_features(
+            db, location.id, hist_source_name, config_hash,
+            start_date=hist_start, end_date=hist_end,
+        )
 
         if precomputed:
             logger.info(
