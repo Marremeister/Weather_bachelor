@@ -2,7 +2,9 @@ import {
   fetchClassification,
   fetchHealth,
   fetchLocations,
+  getAnalysisRun,
   getWeatherRecords,
+  listAnalysisRuns,
   runAnalysis,
 } from "./api";
 import { renderWindSpeedChart, renderWindDirectionChart } from "./charts";
@@ -11,6 +13,13 @@ import {
   renderHourlyTable,
   renderAnalogTable,
 } from "./dashboard";
+import {
+  downloadWeatherCsv,
+  downloadAnalogsCsv,
+  downloadAnalysisJson,
+  downloadWindSpeedChart,
+  downloadWindDirectionChart,
+} from "./export";
 import type { Location, SeaBreezeClassification } from "./types";
 import "./styles.css";
 
@@ -35,6 +44,17 @@ const hourlyTable = document.getElementById("hourly-table")!;
 const analogSection = document.getElementById("analog-section")!;
 const analogTable = document.getElementById("analog-table")!;
 
+// Export buttons
+const exportJsonBtn = document.getElementById("export-json-btn") as HTMLButtonElement;
+const exportSpeedPngBtn = document.getElementById("export-speed-png-btn") as HTMLButtonElement;
+const exportDirPngBtn = document.getElementById("export-dir-png-btn") as HTMLButtonElement;
+const exportWeatherCsvBtn = document.getElementById("export-weather-csv-btn") as HTMLButtonElement;
+const exportAnalogsCsvBtn = document.getElementById("export-analogs-csv-btn") as HTMLButtonElement;
+
+// History
+const historyList = document.getElementById("history-list")!;
+const refreshHistoryBtn = document.getElementById("refresh-history-btn") as HTMLButtonElement;
+
 // Legacy
 const healthStatusEl = document.getElementById("health-status")!;
 const locationsEl = document.getElementById("locations")!;
@@ -44,6 +64,8 @@ const classificationResultEl = document.getElementById("classification-result")!
 
 // --- Store ---
 let locations: Location[] = [];
+let currentRunId: number | null = null;
+let currentTargetDate = "";
 
 // --- Init ---
 
@@ -128,6 +150,84 @@ function setDefaultDates() {
   histEndInput.value = `${endYear}-09-30`;
 }
 
+// --- History ---
+
+async function loadHistory() {
+  try {
+    const runs = await listAnalysisRuns();
+    if (runs.length === 0) {
+      historyList.innerHTML = `<p class="history-empty">No previous runs found.</p>`;
+      return;
+    }
+    historyList.innerHTML = runs
+      .map(
+        (run) => `
+        <div class="history-item" data-run-id="${run.id}" data-location-id="${run.location_id}" data-target-date="${run.target_date}" data-hist-start="${run.historical_start_date ?? ""}" data-hist-end="${run.historical_end_date ?? ""}" data-top-n="${run.top_n ?? 10}">
+          <span class="hi-date">${run.target_date}</span>
+          <span class="hi-meta">${run.status} &middot; ${run.historical_start_date ?? "?"} to ${run.historical_end_date ?? "?"}</span>
+        </div>
+      `,
+      )
+      .join("");
+  } catch {
+    historyList.innerHTML = `<p class="history-empty">Failed to load history.</p>`;
+  }
+}
+
+historyList.addEventListener("click", async (e) => {
+  const item = (e.target as HTMLElement).closest(".history-item") as HTMLElement | null;
+  if (!item) return;
+
+  const runId = Number(item.dataset.runId);
+  const locationId = Number(item.dataset.locationId);
+  const targetDate = item.dataset.targetDate!;
+  const histStart = item.dataset.histStart!;
+  const histEnd = item.dataset.histEnd!;
+  const topN = item.dataset.topN!;
+
+  // Restore form fields
+  locationSelect.value = String(locationId);
+  targetDateInput.value = targetDate;
+  if (histStart) histStartInput.value = histStart;
+  if (histEnd) histEndInput.value = histEnd;
+  topNInput.value = topN;
+
+  runBtn.disabled = true;
+  runBtn.innerHTML = `<span class="loading-spinner"></span>Loading…`;
+
+  try {
+    const analysisRun = await getAnalysisRun(runId);
+    const weatherRecords = await getWeatherRecords(locationId, targetDate, targetDate);
+
+    currentRunId = runId;
+    currentTargetDate = targetDate;
+
+    renderSummaryPanel(summaryPanel, analysisRun);
+    summarySection.hidden = false;
+
+    if (weatherRecords.length > 0) {
+      chartsSection.hidden = false;
+      renderWindSpeedChart(speedChartEl, weatherRecords);
+      renderWindDirectionChart(dirChartEl, weatherRecords);
+    }
+
+    renderHourlyTable(hourlyTable, weatherRecords);
+    hourlySection.hidden = false;
+
+    renderAnalogTable(analogTable, analysisRun.analogs);
+    analogSection.hidden = false;
+  } catch (err) {
+    showError(err instanceof Error ? err.message : "Failed to load run.");
+  } finally {
+    runBtn.disabled = false;
+    runBtn.textContent = "Run Analysis";
+  }
+});
+
+refreshHistoryBtn.addEventListener("click", () => {
+  loadHistory();
+});
+
 // --- Analysis ---
 
 analysisForm.addEventListener("submit", async (e) => {
@@ -156,6 +256,9 @@ analysisForm.addEventListener("submit", async (e) => {
       locationId, targetDateInput.value, targetDateInput.value,
     );
 
+    currentRunId = analysisRun.id;
+    currentTargetDate = targetDateInput.value;
+
     // Summary
     renderSummaryPanel(summaryPanel, analysisRun);
     summarySection.hidden = false;
@@ -174,6 +277,9 @@ analysisForm.addEventListener("submit", async (e) => {
     // Analog table
     renderAnalogTable(analogTable, analysisRun.analogs);
     analogSection.hidden = false;
+
+    // Refresh history to include this new run
+    loadHistory();
   } catch (err) {
     showError(err instanceof Error ? err.message : "Analysis failed.");
   } finally {
@@ -186,6 +292,28 @@ function showError(msg: string) {
   analysisError.textContent = msg;
   analysisError.hidden = false;
 }
+
+// --- Export handlers ---
+
+exportJsonBtn.addEventListener("click", () => {
+  if (currentRunId != null) downloadAnalysisJson(currentRunId, currentTargetDate);
+});
+
+exportSpeedPngBtn.addEventListener("click", () => {
+  downloadWindSpeedChart(currentTargetDate);
+});
+
+exportDirPngBtn.addEventListener("click", () => {
+  downloadWindDirectionChart(currentTargetDate);
+});
+
+exportWeatherCsvBtn.addEventListener("click", () => {
+  if (currentRunId != null) downloadWeatherCsv(currentRunId, currentTargetDate);
+});
+
+exportAnalogsCsvBtn.addEventListener("click", () => {
+  if (currentRunId != null) downloadAnalogsCsv(currentRunId, currentTargetDate);
+});
 
 // --- Legacy classification ---
 
@@ -242,3 +370,4 @@ classifyBtn.addEventListener("click", async () => {
 initHealth();
 initLocations();
 setDefaultDates();
+loadHistory();

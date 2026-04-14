@@ -60,6 +60,20 @@ export interface AnalogResult {
   created_at: string;
 }
 
+export interface AnalysisRunSummary {
+  id: number;
+  location_id: number;
+  target_date: string;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  summary: string | null;
+  historical_start_date: string | null;
+  historical_end_date: string | null;
+  top_n: number | null;
+  created_at: string;
+}
+
 export interface AnalysisRunDetail {
   id: number;
   location_id: number;

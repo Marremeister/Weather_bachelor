@@ -1,4 +1,4 @@
-import type { AnalysisRequest, AnalysisRunDetail, AnalogResult, HealthResponse, Location, SeaBreezeClassification, WeatherFetchResponse, WeatherRecord } from "./types";
+import type { AnalysisRequest, AnalysisRunDetail, AnalysisRunSummary, AnalogResult, HealthResponse, Location, SeaBreezeClassification, WeatherFetchResponse, WeatherRecord } from "./types";
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch("/api/health");
@@ -90,6 +90,21 @@ export async function getAnalysisRun(
     throw new Error(`Analysis run fetch failed: ${res.status}`);
   }
   return res.json() as Promise<AnalysisRunDetail>;
+}
+
+export async function listAnalysisRuns(
+  locationId?: number,
+): Promise<AnalysisRunSummary[]> {
+  const params = new URLSearchParams();
+  if (locationId !== undefined) {
+    params.set("location_id", String(locationId));
+  }
+  const qs = params.toString();
+  const res = await fetch(`/api/analysis${qs ? `?${qs}` : ""}`);
+  if (!res.ok) {
+    throw new Error(`List analysis runs failed: ${res.status}`);
+  }
+  return res.json() as Promise<AnalysisRunSummary[]>;
 }
 
 export async function getAnalysisAnalogs(

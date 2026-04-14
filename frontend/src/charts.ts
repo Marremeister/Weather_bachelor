@@ -135,6 +135,14 @@ export function renderWindDirectionChart(
   });
 }
 
+export function getSpeedChart(): ECharts | null {
+  return speedChart;
+}
+
+export function getDirectionChart(): ECharts | null {
+  return directionChart;
+}
+
 function handleResize() {
   speedChart?.resize();
   directionChart?.resize();

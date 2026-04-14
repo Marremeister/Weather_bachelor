@@ -47,27 +47,50 @@
         <div id="analysis-error" class="error-msg" hidden></div>
       </section>
 
+      <!-- Previous Runs -->
+      <section class="card" id="history-section">
+        <div class="section-header">
+          <h2>Previous Runs</h2>
+          <button id="refresh-history-btn" class="btn-export">Refresh</button>
+        </div>
+        <div id="history-list" class="history-list">
+          <p class="history-empty">No previous runs found.</p>
+        </div>
+      </section>
+
       <!-- Summary Panel -->
       <section class="card" id="summary-section" hidden>
-        <h2>Analysis Summary</h2>
+        <div class="section-header">
+          <h2>Analysis Summary</h2>
+          <button id="export-json-btn" class="btn-export">Export JSON</button>
+        </div>
         <div id="summary-panel"></div>
       </section>
 
       <!-- Charts Row -->
       <section id="charts-section" class="charts-row" hidden>
         <div class="card chart-card">
-          <h3>Wind Speed</h3>
+          <div class="section-header">
+            <h3>Wind Speed</h3>
+            <button id="export-speed-png-btn" class="btn-export">Save PNG</button>
+          </div>
           <div id="wind-speed-chart" class="chart-container"></div>
         </div>
         <div class="card chart-card">
-          <h3>Wind Direction</h3>
+          <div class="section-header">
+            <h3>Wind Direction</h3>
+            <button id="export-dir-png-btn" class="btn-export">Save PNG</button>
+          </div>
           <div id="wind-direction-chart" class="chart-container"></div>
         </div>
       </section>
 
       <!-- Hourly Data Table -->
       <section class="card" id="hourly-section" hidden>
-        <h2>Hourly Weather Data</h2>
+        <div class="section-header">
+          <h2>Hourly Weather Data</h2>
+          <button id="export-weather-csv-btn" class="btn-export">Export CSV</button>
+        </div>
         <div class="table-scroll">
           <table id="hourly-table" class="data-table"></table>
         </div>
@@ -75,7 +98,10 @@
 
       <!-- Analog Days Table -->
       <section class="card" id="analog-section" hidden>
-        <h2>Analog Days Ranking</h2>
+        <div class="section-header">
+          <h2>Analog Days Ranking</h2>
+          <button id="export-analogs-csv-btn" class="btn-export">Export CSV</button>
+        </div>
         <div class="table-scroll">
           <table id="analog-table" class="data-table"></table>
         </div>
