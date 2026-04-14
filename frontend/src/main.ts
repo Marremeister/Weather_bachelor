@@ -1,8 +1,12 @@
-import { fetchHealth, fetchLocations } from "./api";
+import { fetchClassification, fetchHealth, fetchLocations } from "./api";
+import type { SeaBreezeClassification } from "./types";
 import "./styles.css";
 
 const statusEl = document.getElementById("health-status")!;
 const locationsEl = document.getElementById("locations")!;
+const classifyBtn = document.getElementById("classify-btn")!;
+const classifyDateInput = document.getElementById("classify-date") as HTMLInputElement;
+const classificationResultEl = document.getElementById("classification-result")!;
 
 async function renderHealth() {
   try {
@@ -64,6 +68,54 @@ async function renderLocations() {
     `;
   }
 }
+
+function indicatorLabel(key: string): string {
+  const labels: Record<string, string> = {
+    speed_increase: "Speed increase",
+    direction_shift: "Direction shift",
+    onshore_fraction: "Onshore fraction",
+  };
+  return labels[key] ?? key;
+}
+
+function renderClassification(data: SeaBreezeClassification) {
+  const levelClass = `level-${data.classification}`;
+  const indicatorRows = Object.entries(data.indicators)
+    .map(
+      ([key, met]) => `
+      <div class="indicator-row">
+        <span>${indicatorLabel(key)}</span>
+        <span class="${met ? "indicator-met" : "indicator-not-met"}">${met ? "Met" : "Not met"}</span>
+      </div>
+    `,
+    )
+    .join("");
+
+  classificationResultEl.innerHTML = `
+    <div class="classification-card">
+      <div class="classification-level ${levelClass}">${data.classification}</div>
+      <div class="classification-score">Score: ${(data.score * 100).toFixed(0)}%</div>
+      ${indicatorRows}
+    </div>
+  `;
+}
+
+classifyBtn.addEventListener("click", async () => {
+  const dateValue = classifyDateInput.value;
+  if (!dateValue) {
+    classificationResultEl.innerHTML = `<p class="status-error">Please select a date.</p>`;
+    return;
+  }
+
+  classificationResultEl.innerHTML = `<p>Classifying…</p>`;
+
+  try {
+    const data = await fetchClassification(1, dateValue);
+    renderClassification(data);
+  } catch {
+    classificationResultEl.innerHTML = `<p class="status-error">Classification failed. Make sure weather data is fetched for this date.</p>`;
+  }
+});
 
 renderHealth();
 renderLocations();

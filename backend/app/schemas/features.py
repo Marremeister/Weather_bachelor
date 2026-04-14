@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -39,3 +40,15 @@ class DailyFeatures(BaseModel):
     hours_available: int = 0
     morning_hours_used: int = 0
     afternoon_hours_used: int = 0
+
+
+class SeaBreezeThresholds(BaseModel):
+    minimum_speed_increase_mps: float = 1.5
+    minimum_direction_shift_degrees: float = 25.0
+    minimum_onshore_fraction: float = 0.5
+
+
+class SeaBreezeClassification(BaseModel):
+    classification: Literal["low", "medium", "high"]
+    score: float
+    indicators: dict[str, bool]

@@ -1,4 +1,4 @@
-import type { HealthResponse, Location, WeatherFetchResponse, WeatherRecord } from "./types";
+import type { HealthResponse, Location, SeaBreezeClassification, WeatherFetchResponse, WeatherRecord } from "./types";
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch("/api/health");
@@ -51,4 +51,19 @@ export async function getWeatherRecords(
     throw new Error(`Weather records fetch failed: ${res.status}`);
   }
   return res.json() as Promise<WeatherRecord[]>;
+}
+
+export async function fetchClassification(
+  locationId: number,
+  date: string,
+): Promise<SeaBreezeClassification> {
+  const params = new URLSearchParams({
+    location_id: String(locationId),
+    date: date,
+  });
+  const res = await fetch(`/api/classification?${params}`);
+  if (!res.ok) {
+    throw new Error(`Classification fetch failed: ${res.status}`);
+  }
+  return res.json() as Promise<SeaBreezeClassification>;
 }

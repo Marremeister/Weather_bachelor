@@ -34,3 +34,9 @@ export interface WeatherFetchResponse {
   records_count: number;
   cached: boolean;
 }
+
+export interface SeaBreezeClassification {
+  classification: "low" | "medium" | "high";
+  score: number;
+  indicators: Record<string, boolean>;
+}

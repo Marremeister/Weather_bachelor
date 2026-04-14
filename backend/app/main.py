@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import SessionLocal
 from app.models.location import Location
-from app.routers import locations, weather
+from app.routers import classification, locations, weather
 
 
 def _seed_default_location() -> None:
@@ -46,6 +46,7 @@ app.add_middleware(
 
 app.include_router(locations.router)
 app.include_router(weather.router)
+app.include_router(classification.router)
 
 
 def _get_psycopg_dsn() -> str:

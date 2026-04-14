@@ -92,3 +92,88 @@ h2 {
   font-weight: 600;
   color: #495057;
 }
+
+/* Classification */
+
+.classification-form {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.classification-form label {
+  font-weight: 600;
+}
+
+.classification-form input[type="date"] {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.classification-form button {
+  padding: 0.4rem 1rem;
+  background: #228be6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.classification-form button:hover {
+  background: #1c7ed6;
+}
+
+.classification-card {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.classification-level {
+  font-weight: 700;
+  font-size: 1.15rem;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+}
+
+.level-high {
+  color: #2b8a3e;
+}
+
+.level-medium {
+  color: #e67700;
+}
+
+.level-low {
+  color: #c92a2a;
+}
+
+.classification-score {
+  margin-bottom: 0.75rem;
+  color: #495057;
+}
+
+.indicator-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+}
+
+.indicator-row + .indicator-row {
+  border-top: 1px solid #f1f3f5;
+}
+
+.indicator-met {
+  color: #2b8a3e;
+  font-weight: 600;
+}
+
+.indicator-not-met {
+  color: #c92a2a;
+  font-weight: 600;
+}
