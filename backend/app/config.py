@@ -11,6 +11,21 @@ class Settings(BaseSettings):
     default_timezone: str = "America/Los_Angeles"
     allowed_origins: str = "http://localhost:5173,http://localhost:5174,http://localhost:5175"
 
+    # ERA5 / CDS settings
+    cdsapi_url: str = "https://cds.climate.copernicus.eu/api"
+    cdsapi_key: str = ""
+    era5_start_year: int = 2015
+    era5_end_year: int = 2024
+    era5_months: str = "05,06,07,08,09"
+    era5_download_timeout: int = 600
+    era5_fallback_to_open_meteo: bool = True
+    era5_data_version: str = "v1"
+    bias_overlap_days: int = 90
+
+    @property
+    def era5_months_list(self) -> list[int]:
+        return [int(m.strip()) for m in self.era5_months.split(",")]
+
     # GFS forecast settings
     grib_cache_dir: str = "../data/grib_cache"
     gfs_analysis_local_start: int = 8   # local hour, analysis window start

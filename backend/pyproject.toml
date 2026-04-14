@@ -16,6 +16,7 @@ dependencies = [
     "cfgrib>=0.9.12",
     "eccodes>=1.7",
     "requests>=2.31",
+    "cdsapi>=0.7",
 ]
 
 [project.optional-dependencies]
