@@ -47,7 +47,7 @@ def _features(**kwargs) -> DailyFeatures:
 class TestFeaturesToVector:
     def test_correct_length(self):
         vec = features_to_vector(_features())
-        assert len(vec) == 11
+        assert len(vec) == 12
 
     def test_scalar_positions(self):
         feat = _features(
@@ -55,14 +55,16 @@ class TestFeaturesToVector:
             reference_wind_speed=4.0,
             afternoon_max_wind_speed=10.0,
             wind_speed_increase=7.0,
+            wind_direction_shift=130.0,
             onshore_fraction=1.0,
         )
         vec = features_to_vector(feat)
-        assert vec[0] == 3.0   # morning_mean_wind_speed
-        assert vec[3] == 4.0   # reference_wind_speed
-        assert vec[6] == 10.0  # afternoon_max_wind_speed
-        assert vec[9] == 7.0   # wind_speed_increase
-        assert vec[10] == 1.0  # onshore_fraction
+        assert vec[0] == 3.0    # morning_mean_wind_speed
+        assert vec[3] == 4.0    # reference_wind_speed
+        assert vec[6] == 10.0   # afternoon_max_wind_speed
+        assert vec[9] == 7.0    # wind_speed_increase
+        assert vec[10] == 130.0  # wind_direction_shift
+        assert vec[11] == 1.0   # onshore_fraction
 
     def test_sincos_at_0_degrees(self):
         feat = _features(morning_mean_wind_direction=0.0)
@@ -238,6 +240,20 @@ class TestRankAnalogs:
         candidates = rank_analogs(target, [far], top_n=10)
         assert len(candidates) == 1
         assert 0 < candidates[0].similarity_score <= 1.0
+
+    def test_opposite_direction_shift_not_equal(self):
+        """Days with opposite wind_direction_shift must have nonzero distance."""
+        target = _features(wind_direction_shift=130.0)
+        same_shift = _features(date=date(2024, 6, 1), wind_direction_shift=130.0)
+        opposite_shift = _features(date=date(2024, 5, 1), wind_direction_shift=-130.0)
+
+        candidates = rank_analogs(target, [same_shift, opposite_shift], top_n=10)
+        assert len(candidates) == 2
+        # same_shift should be closer (rank 1)
+        assert candidates[0].date == date(2024, 6, 1)
+        assert candidates[0].distance < candidates[1].distance
+        # opposite_shift must have nonzero distance
+        assert candidates[1].distance > 0.0
 
 
 # ---------------------------------------------------------------------------

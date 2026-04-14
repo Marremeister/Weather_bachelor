@@ -42,10 +42,14 @@ _REQUIRED_FIELDS = (
 
 
 def features_to_vector(features: DailyFeatures) -> list[float]:
-    """Convert a DailyFeatures instance to an 11-dimensional vector.
+    """Convert a DailyFeatures instance to a 12-dimensional vector.
 
     Wind directions are decomposed into sin/cos pairs so Euclidean distance
-    handles circular data correctly.  The resulting order is:
+    handles circular data correctly.  ``wind_direction_shift`` is included as
+    a scalar because it captures the signed magnitude of the morning→afternoon
+    rotation which the individual direction decompositions do not fully encode.
+
+    The resulting order is:
 
         [morning_mean_wind_speed,
          sin(morning_mean_wind_direction), cos(morning_mean_wind_direction),
@@ -54,6 +58,7 @@ def features_to_vector(features: DailyFeatures) -> list[float]:
          afternoon_max_wind_speed,
          sin(afternoon_mean_wind_direction), cos(afternoon_mean_wind_direction),
          wind_speed_increase,
+         wind_direction_shift,
          onshore_fraction]
     """
 
@@ -76,6 +81,7 @@ def features_to_vector(features: DailyFeatures) -> list[float]:
         afternoon_dir_sin,
         afternoon_dir_cos,
         features.wind_speed_increase,
+        features.wind_direction_shift,
         features.onshore_fraction,
     ]
 
