@@ -1,14 +1,19 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import psycopg
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 
 from app.config import settings
 from app.database import SessionLocal
 from app.models.location import Location
 from app.routers import analysis, classification, locations, weather
+
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 def _seed_default_location() -> None:
@@ -37,9 +42,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Sea Breeze Analog", lifespan=lifespan)
 
+# Dynamic CORS origins from settings
+origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174"],
+    allow_origins=origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -72,3 +79,18 @@ def health():
         "database": db_status,
         "environment": settings.app_env,
     }
+
+
+# --- Production static file serving ---
+# The static/ dir only exists inside the production Docker image.
+if STATIC_DIR.is_dir():
+    # Serve Vite-built assets (JS, CSS, images)
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):
+        """Serve index.html for any non-API route (SPA client-side routing)."""
+        file = STATIC_DIR / full_path
+        if file.is_file():
+            return FileResponse(file)
+        return FileResponse(STATIC_DIR / "index.html")

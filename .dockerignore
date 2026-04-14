@@ -1,5 +1,11 @@
+# Git
+.git
+.gitignore
+
 # Environment
 .env
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -10,18 +16,16 @@ __pycache__/
 # Node
 node_modules/
 
-# Frontend build output
-frontend/dist/
-
-# Data
+# Data / cache
 data/
 
-# Claude Code
+# IDE / OS
 .claude/
-
-# OS
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
 
 # Docker
 pgdata/
+docker-compose.yml
