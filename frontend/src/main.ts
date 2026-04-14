@@ -293,7 +293,7 @@ analysisForm.addEventListener("submit", async (e) => {
       historical_end_date: histEndInput.value,
       top_n: Number(topNInput.value),
       mode: currentMode,
-      forecast_source: currentMode === "forecast" ? "open_meteo" : undefined,
+      forecast_source: currentMode === "forecast" ? "open_meteo_forecast" : undefined,
       historical_source: currentMode === "forecast" ? "open_meteo" : undefined,
     });
     const weatherRecords = await getWeatherRecords(

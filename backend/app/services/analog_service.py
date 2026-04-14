@@ -17,7 +17,8 @@ from app.models.weather_record import WeatherRecord
 from app.schemas.analog import AnalogCandidate
 from app.schemas.features import AnalysisWindow, DailyFeatures
 from app.services.feature_service import compute_daily_features
-from app.services.open_meteo_provider import OpenMeteoProvider
+from app.services.open_meteo_provider import OpenMeteoForecastProvider, OpenMeteoProvider
+from app.services.weather_provider import WeatherProvider
 from app.services.weather_service import fetch_weather
 
 logger = logging.getLogger(__name__)
@@ -220,7 +221,10 @@ def run_analog_analysis(
 
     Returns the AnalysisRun ORM object.
     """
-    provider = OpenMeteoProvider()
+    hist_provider = OpenMeteoProvider()
+    target_provider: WeatherProvider = (
+        OpenMeteoForecastProvider() if mode == "forecast" else hist_provider
+    )
 
     run = AnalysisRun(
         location_id=location.id,
@@ -231,8 +235,8 @@ def run_analog_analysis(
         historical_end_date=hist_end,
         top_n=top_n,
         mode=mode,
-        forecast_source=forecast_source or provider.source_name,
-        historical_source=historical_source or provider.source_name,
+        forecast_source=forecast_source or target_provider.source_name,
+        historical_source=historical_source or hist_provider.source_name,
     )
     db.add(run)
     db.commit()
@@ -241,14 +245,14 @@ def run_analog_analysis(
     try:
         # -- Fetch historical weather in yearly chunks --
         for chunk_start, chunk_end in yearly_chunks(hist_start, hist_end):
-            count, cached = fetch_weather(db, provider, location, chunk_start, chunk_end)
+            count, cached = fetch_weather(db, hist_provider, location, chunk_start, chunk_end)
             logger.info(
                 "Chunk %s–%s: %d records (cached=%s)",
                 chunk_start, chunk_end, count, cached,
             )
 
         # -- Fetch target date weather --
-        t_count, t_cached = fetch_weather(db, provider, location, target_date, target_date)
+        t_count, t_cached = fetch_weather(db, target_provider, location, target_date, target_date)
         logger.info("Target %s: %d records (cached=%s)", target_date, t_count, t_cached)
 
         # -- Load weather records from DB for the full date range --
