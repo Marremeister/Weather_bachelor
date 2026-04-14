@@ -118,6 +118,46 @@ export interface BiasReportResponse {
   corrections: BiasCorrection[];
 }
 
+export interface DailyFeatures {
+  location_id: number;
+  date: string;
+  morning_mean_wind_speed: number | null;
+  morning_mean_wind_direction: number | null;
+  reference_wind_speed: number | null;
+  reference_wind_direction: number | null;
+  afternoon_max_wind_speed: number | null;
+  afternoon_mean_wind_direction: number | null;
+  wind_speed_increase: number | null;
+  wind_direction_shift: number | null;
+  onshore_fraction: number | null;
+  hours_available: number;
+  morning_hours_used: number;
+  afternoon_hours_used: number;
+}
+
+export interface SeaBreezeThresholds {
+  minimum_speed_increase_mps: number;
+  minimum_direction_shift_degrees: number;
+  minimum_onshore_fraction: number;
+}
+
+export interface DayClassificationDetail {
+  date: string;
+  features: DailyFeatures;
+  classification: SeaBreezeClassification;
+}
+
+export interface SeaBreezePanelData {
+  run_id: number;
+  target: DayClassificationDetail;
+  analogs: DayClassificationDetail[];
+  thresholds: SeaBreezeThresholds;
+  analog_high_count: number;
+  analog_medium_count: number;
+  analog_low_count: number;
+  analog_total: number;
+}
+
 export interface BiasCorrection {
   forecast_source: string;
   historical_source: string;

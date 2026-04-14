@@ -1,4 +1,4 @@
-import type { AnalysisRequest, AnalysisRunDetail, AnalysisRunSummary, AnalogResult, BiasReportResponse, HealthResponse, LibraryStatusResponse, Location, SeaBreezeClassification, WeatherFetchResponse, WeatherRecord } from "./types";
+import type { AnalysisRequest, AnalysisRunDetail, AnalysisRunSummary, AnalogResult, BiasReportResponse, HealthResponse, LibraryStatusResponse, Location, SeaBreezeClassification, SeaBreezePanelData, WeatherFetchResponse, WeatherRecord } from "./types";
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch("/api/health");
@@ -173,4 +173,14 @@ export async function getBiasReport(
     throw new Error(`Bias report fetch failed: ${res.status}`);
   }
   return res.json() as Promise<BiasReportResponse>;
+}
+
+export async function getSeaBreezePanel(
+  runId: number,
+): Promise<SeaBreezePanelData> {
+  const res = await fetch(`/api/analysis/${runId}/sea-breeze-panel`);
+  if (!res.ok) {
+    throw new Error(`Sea breeze panel fetch failed: ${res.status}`);
+  }
+  return res.json() as Promise<SeaBreezePanelData>;
 }

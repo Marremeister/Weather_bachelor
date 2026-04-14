@@ -1,5 +1,5 @@
 import { use, init, type ECharts } from "echarts/core";
-import { LineChart, ScatterChart, BarChart, CustomChart } from "echarts/charts";
+import { LineChart, ScatterChart, BarChart, CustomChart, PieChart } from "echarts/charts";
 import {
   GridComponent,
   TitleComponent,
@@ -16,6 +16,7 @@ use([
   ScatterChart,
   BarChart,
   CustomChart,
+  PieChart,
   GridComponent,
   TitleComponent,
   TooltipComponent,
@@ -30,6 +31,7 @@ let tempPressureChart: ECharts | null = null;
 let morningWindRoseChart: ECharts | null = null;
 let afternoonWindRoseChart: ECharts | null = null;
 let biasChart: ECharts | null = null;
+let analogDonutChart: ECharts | null = null;
 
 export function renderWindOverlayChart(
   container: HTMLElement,
@@ -278,7 +280,7 @@ function binWindBySector(
 
   for (const r of records) {
     const hour = new Date(r.valid_time_local).getHours();
-    if (hour < startHour || hour >= endHour) continue;
+    if (hour < startHour || hour > endHour) continue;
     if (r.true_wind_speed == null || r.true_wind_direction == null) continue;
 
     const idx = Math.floor(((r.true_wind_direction + 22.5) % 360) / 45);
@@ -532,12 +534,56 @@ export function getBiasChart(): ECharts | null {
   return biasChart;
 }
 
+// --- Analog Donut Chart ---
+
+export function renderAnalogDonutChart(
+  container: HTMLElement,
+  high: number,
+  medium: number,
+  low: number,
+): void {
+  if (analogDonutChart) analogDonutChart.dispose();
+  analogDonutChart = init(container);
+
+  analogDonutChart.setOption({
+    tooltip: {
+      trigger: "item",
+      formatter(params: unknown) {
+        const p = params as { name: string; value: number; percent: number };
+        return `${p.name}: ${p.value} (${p.percent.toFixed(0)}%)`;
+      },
+    },
+    legend: {
+      bottom: 0,
+      left: "center",
+      itemWidth: 12,
+      itemHeight: 12,
+      textStyle: { fontSize: 12 },
+    },
+    series: [
+      {
+        type: "pie",
+        radius: ["45%", "70%"],
+        center: ["50%", "45%"],
+        avoidLabelOverlap: true,
+        label: { show: false },
+        data: [
+          { value: high, name: "High", itemStyle: { color: "#2b8a3e" } },
+          { value: medium, name: "Medium", itemStyle: { color: "#e67700" } },
+          { value: low, name: "Low", itemStyle: { color: "#c92a2a" } },
+        ].filter((d) => d.value > 0),
+      },
+    ],
+  });
+}
+
 function handleResize() {
   windOverlayChart?.resize();
   tempPressureChart?.resize();
   morningWindRoseChart?.resize();
   afternoonWindRoseChart?.resize();
   biasChart?.resize();
+  analogDonutChart?.resize();
 }
 
 window.addEventListener("resize", handleResize);

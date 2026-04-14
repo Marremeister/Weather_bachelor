@@ -5,6 +5,7 @@ import {
   getAnalysisRun,
   getBiasReport,
   getLibraryStatus,
+  getSeaBreezePanel,
   getWeatherRecords,
   listAnalysisRuns,
   runAnalysis,
@@ -16,6 +17,8 @@ import {
   renderAnalogTable,
   renderQualityIndicators,
   renderBiasTable,
+  renderSeaBreezeGauges,
+  renderAnalogProbability,
 } from "./dashboard";
 import {
   downloadWeatherCsv,
@@ -50,6 +53,11 @@ const hourlySection = document.getElementById("hourly-section")!;
 const hourlyTable = document.getElementById("hourly-table")!;
 const analogSection = document.getElementById("analog-section")!;
 const analogTable = document.getElementById("analog-table")!;
+
+// Sea Breeze Panel
+const seaBreezeSection = document.getElementById("sea-breeze-section")!;
+const sbGaugesPanel = document.getElementById("sb-gauges-panel")!;
+const sbProbabilityPanel = document.getElementById("sb-probability-panel")!;
 
 // Wind rose
 const windroseSection = document.getElementById("windrose-section")!;
@@ -286,6 +294,12 @@ historyList.addEventListener("click", async (e) => {
     analogSection.hidden = false;
 
     renderBiasQualityPanel(locationId, analysisRun, weatherRecords);
+
+    getSeaBreezePanel(runId).then((panelData) => {
+      renderSeaBreezeGauges(sbGaugesPanel, panelData);
+      renderAnalogProbability(sbProbabilityPanel, panelData);
+      seaBreezeSection.hidden = false;
+    }).catch(() => { seaBreezeSection.hidden = true; });
   } catch (err) {
     showError(err instanceof Error ? err.message : "Failed to load run.");
   } finally {
@@ -358,6 +372,13 @@ analysisForm.addEventListener("submit", async (e) => {
 
     // Bias / Quality panel
     renderBiasQualityPanel(locationId, analysisRun, weatherRecords);
+
+    // Sea Breeze panel (non-blocking)
+    getSeaBreezePanel(analysisRun.id).then((panelData) => {
+      renderSeaBreezeGauges(sbGaugesPanel, panelData);
+      renderAnalogProbability(sbProbabilityPanel, panelData);
+      seaBreezeSection.hidden = false;
+    }).catch(() => { seaBreezeSection.hidden = true; });
 
     // Refresh history to include this new run
     loadHistory();

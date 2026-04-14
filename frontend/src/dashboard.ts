@@ -1,4 +1,5 @@
-import type { AnalogResult, AnalysisRunDetail, BiasCorrection, LibraryStatusResponse, WeatherRecord } from "./types";
+import type { AnalogResult, AnalysisRunDetail, BiasCorrection, LibraryStatusResponse, SeaBreezePanelData, WeatherRecord } from "./types";
+import { renderAnalogDonutChart } from "./charts";
 
 export function renderSummaryPanel(
   container: HTMLElement,
@@ -294,6 +295,107 @@ export function renderBiasTable(
     .join("");
 
   container.innerHTML = `${headerRow}<tbody>${bodyRows}</tbody>`;
+}
+
+// --- Sea Breeze Gauges ---
+
+export function renderSeaBreezeGauges(
+  container: HTMLElement,
+  data: SeaBreezePanelData,
+): void {
+  const f = data.target.features;
+  const t = data.thresholds;
+  const cls = data.target.classification;
+
+  const gauges = [
+    {
+      label: "Speed Increase",
+      value: f.wind_speed_increase,
+      max: Math.max(t.minimum_speed_increase_mps * 2, (f.wind_speed_increase ?? 0) * 1.3, 5),
+      threshold: t.minimum_speed_increase_mps,
+      unit: "m/s",
+      met: cls.indicators.speed_increase ?? false,
+    },
+    {
+      label: "Direction Shift",
+      value: f.wind_direction_shift,
+      max: Math.max(t.minimum_direction_shift_degrees * 2, (f.wind_direction_shift ?? 0) * 1.3, 90),
+      threshold: t.minimum_direction_shift_degrees,
+      unit: "°",
+      met: cls.indicators.direction_shift ?? false,
+    },
+    {
+      label: "Onshore Fraction",
+      value: f.onshore_fraction,
+      max: 1,
+      threshold: t.minimum_onshore_fraction,
+      unit: "",
+      met: cls.indicators.onshore_fraction ?? false,
+    },
+  ];
+
+  const gaugeHtml = gauges
+    .map((g) => {
+      const val = g.value ?? 0;
+      const pct = Math.min((val / g.max) * 100, 100);
+      const threshPct = Math.min((g.threshold / g.max) * 100, 100);
+      const color = g.met ? "#2b8a3e" : "#c92a2a";
+      const displayVal = g.unit === "" ? `${(val * 100).toFixed(0)}%` : `${val.toFixed(1)} ${g.unit}`;
+      return `
+        <div class="sb-gauge">
+          <div class="sb-gauge-label">
+            <span>${g.label}</span>
+            <span>${displayVal}</span>
+          </div>
+          <div class="sb-gauge-bar-track">
+            <div class="sb-gauge-bar-fill" style="width:${pct}%;background:${color}"></div>
+            <div class="sb-gauge-threshold" style="left:${threshPct}%" title="Threshold: ${g.unit === '' ? `${(g.threshold * 100).toFixed(0)}%` : `${g.threshold} ${g.unit}`}"></div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  const levelClass = `level-${cls.classification}`;
+  container.innerHTML = `
+    <div class="sb-gauges-panel">
+      ${gaugeHtml}
+      <div>
+        <span class="sb-classification-badge ${levelClass}">${cls.classification} sea breeze</span>
+        <span style="margin-left:0.5rem;font-size:0.85rem;color:#868e96;">Score: ${(cls.score * 100).toFixed(0)}%</span>
+      </div>
+    </div>
+  `;
+}
+
+// --- Analog Probability ---
+
+export function renderAnalogProbability(
+  container: HTMLElement,
+  data: SeaBreezePanelData,
+): void {
+  const { analog_high_count, analog_total } = data;
+  const pct = analog_total > 0 ? Math.round((analog_high_count / analog_total) * 100) : 0;
+
+  container.innerHTML = `
+    <div class="sb-probability-panel">
+      <div>
+        <div class="sb-prob-number">${analog_high_count}/${analog_total} analogs (${pct}%)</div>
+        <div class="sb-prob-subtitle">had a strong sea breeze</div>
+      </div>
+      <div id="sb-donut-chart" class="sb-donut-container"></div>
+    </div>
+  `;
+
+  const donutEl = container.querySelector("#sb-donut-chart") as HTMLElement;
+  if (donutEl) {
+    renderAnalogDonutChart(
+      donutEl,
+      data.analog_high_count,
+      data.analog_medium_count,
+      data.analog_low_count,
+    );
+  }
 }
 
 function fmt(value: number | null, decimals: number): string {

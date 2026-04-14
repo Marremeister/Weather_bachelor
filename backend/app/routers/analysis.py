@@ -21,7 +21,14 @@ from app.schemas.analog import (
     AnalysisRunDetailResponse,
     AnalysisRunResponse,
 )
+from app.schemas.features import (
+    DayClassificationDetail,
+    SeaBreezePanelResponse,
+    SeaBreezeThresholds,
+)
 from app.services.analog_service import run_analog_analysis
+from app.services.feature_service import compute_daily_features
+from app.services.classification_service import classify_sea_breeze
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
@@ -280,6 +287,78 @@ def export_analysis_json(
     return JSONResponse(
         content=payload,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{run_id}/sea-breeze-panel", response_model=SeaBreezePanelResponse)
+def get_sea_breeze_panel(
+    run_id: int,
+    db: Session = Depends(get_db),
+):
+    run = db.get(AnalysisRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+
+    analogs = (
+        db.execute(
+            select(AnalogResult)
+            .where(AnalogResult.analysis_run_id == run.id)
+            .order_by(AnalogResult.rank)
+        )
+        .scalars()
+        .all()
+    )
+
+    target_source = run.forecast_source or run.historical_source
+    analog_source = run.historical_source
+
+    thresholds = SeaBreezeThresholds()
+
+    def _classify_day(
+        loc_id: int, day: _dt.date, source: str | None,
+    ) -> DayClassificationDetail:
+        start_dt = _dt.datetime.combine(day, time.min)
+        end_dt = _dt.datetime.combine(day, time.max)
+        stmt = select(WeatherRecord).where(
+            WeatherRecord.location_id == loc_id,
+            WeatherRecord.valid_time_local >= start_dt,
+            WeatherRecord.valid_time_local <= end_dt,
+        )
+        if source:
+            stmt = stmt.where(WeatherRecord.source == source)
+        records = (
+            db.execute(stmt.order_by(WeatherRecord.valid_time_local))
+            .scalars()
+            .all()
+        )
+        features = compute_daily_features(records, loc_id, day)
+        classification = classify_sea_breeze(features, thresholds)
+        return DayClassificationDetail(
+            date=day,
+            features=features,
+            classification=classification,
+        )
+
+    target_detail = _classify_day(run.location_id, run.target_date, target_source)
+
+    analog_details: list[DayClassificationDetail] = []
+    for analog in analogs:
+        detail = _classify_day(run.location_id, analog.analog_date, analog_source)
+        analog_details.append(detail)
+
+    high = sum(1 for a in analog_details if a.classification.classification == "high")
+    medium = sum(1 for a in analog_details if a.classification.classification == "medium")
+    low = sum(1 for a in analog_details if a.classification.classification == "low")
+
+    return SeaBreezePanelResponse(
+        run_id=run.id,
+        target=target_detail,
+        analogs=analog_details,
+        thresholds=thresholds,
+        analog_high_count=high,
+        analog_medium_count=medium,
+        analog_low_count=low,
+        analog_total=len(analog_details),
     )
 
 

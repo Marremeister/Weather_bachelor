@@ -52,3 +52,20 @@ class SeaBreezeClassification(BaseModel):
     classification: Literal["low", "medium", "high"]
     score: float
     indicators: dict[str, bool]
+
+
+class DayClassificationDetail(BaseModel):
+    date: date
+    features: DailyFeatures
+    classification: SeaBreezeClassification
+
+
+class SeaBreezePanelResponse(BaseModel):
+    run_id: int
+    target: DayClassificationDetail
+    analogs: list[DayClassificationDetail]
+    thresholds: SeaBreezeThresholds
+    analog_high_count: int
+    analog_medium_count: int
+    analog_low_count: int
+    analog_total: int
