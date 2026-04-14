@@ -332,9 +332,15 @@ class GfsForecastProvider(WeatherProvider):
 
             current += timedelta(days=1)
 
+        total_expected = len(all_fhours)
         if not all_records and errors:
             raise GfsDownloadError(
                 f"All GFS downloads failed: {'; '.join(errors[:3])}"
+            )
+        if total_expected > 0 and len(all_records) < total_expected * 0.9:
+            raise GfsDownloadError(
+                f"GFS partial failure: got {len(all_records)}/{total_expected} "
+                f"hours; {'; '.join(errors[:3])}"
             )
 
         return FetchResult(

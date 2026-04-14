@@ -168,24 +168,36 @@ def _gfs_cache_is_fresh(
     start_utc = start_dt.astimezone(ZoneInfo("UTC"))
     end_utc = end_dt.astimezone(ZoneInfo("UTC"))
 
-    stored_mrt = db.execute(
-        select(func.max(WeatherRecord.model_run_time))
+    row = db.execute(
+        select(
+            func.min(WeatherRecord.model_run_time),
+            func.max(WeatherRecord.model_run_time),
+        )
         .where(
             WeatherRecord.location_id == location.id,
             WeatherRecord.source == "gfs",
             WeatherRecord.valid_time_utc >= start_utc,
             WeatherRecord.valid_time_utc <= end_utc,
         )
-    ).scalar()
+    ).one()
+    min_mrt, max_mrt = row
 
-    if stored_mrt is None:
+    if max_mrt is None:
         return False  # no records at all
 
     now_utc = datetime.now(tz=ZoneInfo("UTC"))
     latest_run, _ = _latest_available_cycle(now_utc)
 
-    # Fresh if the stored model run is the same as (or newer than) the latest
-    return stored_mrt >= latest_run
+    if min_mrt != max_mrt:
+        # Mixed model runs — some rows are from an older cycle
+        logger.info(
+            "GFS cache has mixed model runs (%s .. %s), marking stale",
+            min_mrt, max_mrt,
+        )
+        return False
+
+    # Fresh if every stored row is from the latest (or newer) cycle
+    return min_mrt >= latest_run
 
 
 def fetch_weather(
