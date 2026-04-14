@@ -3,7 +3,7 @@
 import csv
 import io
 import datetime as _dt
-from datetime import date, time
+from datetime import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -132,21 +132,18 @@ def export_weather_csv(
     if run is None:
         raise HTTPException(status_code=404, detail="Analysis run not found")
 
-    day_start = run.target_date
-    day_end = date(day_start.year, day_start.month, day_start.day)
-
-    start_dt = _dt.datetime.combine(day_start, time.min)
-    end_dt = _dt.datetime.combine(day_end, time.max)
+    start_dt = _dt.datetime.combine(run.target_date, time.min)
+    end_dt = _dt.datetime.combine(run.target_date, time.max)
 
     records = (
         db.execute(
             select(WeatherRecord)
             .where(
                 WeatherRecord.location_id == run.location_id,
-                WeatherRecord.valid_time_utc >= start_dt,
-                WeatherRecord.valid_time_utc <= end_dt,
+                WeatherRecord.valid_time_local >= start_dt,
+                WeatherRecord.valid_time_local <= end_dt,
             )
-            .order_by(WeatherRecord.valid_time_utc)
+            .order_by(WeatherRecord.valid_time_local)
         )
         .scalars()
         .all()
@@ -237,10 +234,10 @@ def export_analysis_json(
             select(WeatherRecord)
             .where(
                 WeatherRecord.location_id == run.location_id,
-                WeatherRecord.valid_time_utc >= start_dt,
-                WeatherRecord.valid_time_utc <= end_dt,
+                WeatherRecord.valid_time_local >= start_dt,
+                WeatherRecord.valid_time_local <= end_dt,
             )
-            .order_by(WeatherRecord.valid_time_utc)
+            .order_by(WeatherRecord.valid_time_local)
         )
         .scalars()
         .all()
