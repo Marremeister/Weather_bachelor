@@ -278,9 +278,11 @@ export interface BatchAggregateMetrics {
   tws_rmse: number | null;
   twd_circular_mae: number | null;
   peak_speed_error_mean: number | null;
+  peak_speed_bias_mean: number | null;
   onset_error_mean: number | null;
   skill_score: number | null;
   total_days: number;
+  insufficient_days: number;
   sea_breeze_days: number;
   forecast_produced_days: number;
 }

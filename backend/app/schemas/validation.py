@@ -38,10 +38,12 @@ class AggregateMetrics(BaseModel):
     tws_rmse: float | None = None
     twd_circular_mae: float | None = None
     peak_speed_error_mean: float | None = None
+    peak_speed_bias_mean: float | None = None
     onset_error_mean: float | None = None
     skill_score: float | None = None
 
     total_days: int = 0
+    insufficient_days: int = 0
     sea_breeze_days: int = 0
     forecast_produced_days: int = 0
 
@@ -82,6 +84,7 @@ class ValidationDayResult(BaseModel):
     peak_speed_forecast: float | None = None
     peak_speed_actual: float | None = None
     peak_speed_error: float | None = None
+    peak_speed_bias: float | None = None
     onset_hour_forecast: int | None = None
     onset_hour_actual: int | None = None
     onset_error_hours: int | None = None

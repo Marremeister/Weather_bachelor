@@ -292,8 +292,10 @@ def _run_hindcast_for_day(
         default=None,
     )
     peak_error = None
+    peak_bias = None
     if forecast_peak is not None and actual_peak is not None:
-        peak_error = _safe(forecast_peak - actual_peak)
+        peak_bias = _safe(forecast_peak - actual_peak)
+        peak_error = _safe(abs(forecast_peak - actual_peak))
 
     # Onset hour
     forecast_onset = _detect_onset_hour(
@@ -317,6 +319,7 @@ def _run_hindcast_for_day(
         "peak_speed_forecast": _safe(forecast_peak),
         "peak_speed_actual": _safe(actual_peak),
         "peak_speed_error": peak_error,
+        "peak_speed_bias": peak_bias,
         "onset_hour_forecast": forecast_onset,
         "onset_hour_actual": actual_onset,
         "onset_error_hours": onset_error,
@@ -424,17 +427,28 @@ def _compute_aggregate_metrics(
     per_day_results: list[dict],
     climatology_mae: float | None,
 ) -> dict:
-    """Compute aggregate classification and continuous metrics from per-day results."""
+    """Compute aggregate classification and continuous metrics from per-day results.
+
+    Days with gate_result="insufficient_data" are excluded from the confusion
+    matrix — they cannot be meaningfully classified and would inflate TN.
+    """
     tp = fp = tn = fn = 0
+    insufficient_days = 0
     tws_maes: list[float] = []
     tws_rmses: list[float] = []
     twd_maes: list[float] = []
     peak_errors: list[float] = []
+    peak_biases: list[float] = []
     onset_errors: list[float] = []
     sea_breeze_days = 0
     forecast_produced_days = 0
 
     for r in per_day_results:
+        # Skip insufficient-data days from classification metrics entirely
+        if r.get("gate_result") == "insufficient_data":
+            insufficient_days += 1
+            continue
+
         # Classification: actual sea breeze = actual_count_true >= 2
         actual_sb = (r.get("actual_count_true") or 0) >= 2
         # Forecast: gate_result is medium or high
@@ -452,7 +466,7 @@ def _compute_aggregate_metrics(
         else:
             tn += 1
 
-        # Continuous metrics: only for days where forecast was produced AND actual is sea breeze
+        # Continuous metrics: only for days where forecast was produced
         if forecast_sb and r.get("tws_mae") is not None:
             forecast_produced_days += 1
             tws_maes.append(r["tws_mae"])
@@ -462,6 +476,8 @@ def _compute_aggregate_metrics(
                 twd_maes.append(r["twd_circular_mae"])
             if r.get("peak_speed_error") is not None:
                 peak_errors.append(r["peak_speed_error"])
+            if r.get("peak_speed_bias") is not None:
+                peak_biases.append(r["peak_speed_bias"])
             if r.get("onset_error_hours") is not None:
                 onset_errors.append(r["onset_error_hours"])
 
@@ -488,9 +504,11 @@ def _compute_aggregate_metrics(
         "tws_rmse": _safe(float(np.mean(tws_rmses))) if tws_rmses else None,
         "twd_circular_mae": _safe(float(np.mean(twd_maes))) if twd_maes else None,
         "peak_speed_error_mean": _safe(float(np.mean(peak_errors))) if peak_errors else None,
+        "peak_speed_bias_mean": _safe(float(np.mean(peak_biases))) if peak_biases else None,
         "onset_error_mean": _safe(float(np.mean(onset_errors))) if onset_errors else None,
         "skill_score": skill_score,
         "total_days": len(per_day_results),
+        "insufficient_days": insufficient_days,
         "sea_breeze_days": sea_breeze_days,
         "forecast_produced_days": forecast_produced_days,
     }
@@ -506,7 +524,13 @@ def _compute_gate_sensitivity(per_day_results: list[dict]) -> list[dict]:
         tws_rmses: list[float] = []
         covered = 0
 
+        total = 0
         for r in per_day_results:
+            # Skip insufficient-data days — can't classify them
+            if r.get("gate_result") == "insufficient_data":
+                continue
+            total += 1
+
             actual_sb = (r.get("actual_count_true") or 0) >= threshold
             forecast_sb = (r.get("classification_count_true") or 0) >= threshold
 
@@ -527,8 +551,6 @@ def _compute_gate_sensitivity(per_day_results: list[dict]) -> list[dict]:
                 tws_maes.append(r["tws_mae"])
                 if r.get("tws_rmse") is not None:
                     tws_rmses.append(r["tws_rmse"])
-
-        total = len(per_day_results)
         precision = tp / (tp + fp) if (tp + fp) > 0 else None
         recall = tp / (tp + fn) if (tp + fn) > 0 else None
         f1 = None

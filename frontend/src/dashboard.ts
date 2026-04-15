@@ -573,6 +573,14 @@ export function renderBatchClassificationMetrics(
       <span class="value">${m.forecast_produced_days}</span>
     </div>
   `);
+  if (m.insufficient_days > 0) {
+    items.push(`
+      <div class="summary-item">
+        <span class="label">Insufficient Data (excluded)</span>
+        <span class="value">${m.insufficient_days}</span>
+      </div>
+    `);
+  }
   items.push(`
     <div class="summary-item">
       <span class="label">Confusion Matrix</span>
@@ -633,8 +641,14 @@ export function renderBatchContinuousMetrics(
   `);
   items.push(`
     <div class="summary-item">
-      <span class="label">Peak Speed Error (mean)</span>
+      <span class="label">Peak Speed Error (mean abs)</span>
       <span class="value">${badge(m.peak_speed_error_mean, [1, 2], "m/s")}</span>
+    </div>
+  `);
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Peak Speed Bias (mean)</span>
+      <span class="value">${m.peak_speed_bias_mean != null ? (m.peak_speed_bias_mean > 0 ? "+" : "") + m.peak_speed_bias_mean.toFixed(2) + " m/s" : "\u2014"}</span>
     </div>
   `);
   items.push(`
