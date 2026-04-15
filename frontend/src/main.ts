@@ -723,15 +723,15 @@ async function renderPhase6Panels(
     for (const btn of heatmapColorToggle.querySelectorAll<HTMLButtonElement>(".toggle-btn")) {
       btn.classList.toggle("active", btn.dataset.mode === "speed");
     }
-    renderSeasonalHeatmapChart(seasonalHeatmapChartEl, currentHeatmapData, "speed");
     seasonalHeatmapSection.hidden = false;
+    renderSeasonalHeatmapChart(seasonalHeatmapChartEl, currentHeatmapData, "speed");
   } else {
     seasonalHeatmapSection.hidden = true;
   }
 
   if (distResult.status === "fulfilled" && distResult.value.entries.length > 0) {
-    renderDistanceHistogramChart(distanceHistogramChartEl, distResult.value);
     distanceDistributionSection.hidden = false;
+    renderDistanceHistogramChart(distanceHistogramChartEl, distResult.value);
   } else {
     distanceDistributionSection.hidden = true;
   }
