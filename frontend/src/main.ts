@@ -218,8 +218,8 @@ const exportMenu = new ExportMenu("export-menu-btn", "export-menu", [
   { id: "json", label: "Analysis JSON", group: "data", handler: () => { if (currentRunId != null) downloadAnalysisJson(currentRunId, currentTargetDate); } },
   { id: "weather-csv", label: "Weather CSV", group: "data", handler: () => { if (currentRunId != null) downloadWeatherCsv(currentRunId, currentTargetDate); } },
   { id: "analogs-csv", label: "Analogs CSV", group: "data", handler: () => { if (currentRunId != null) downloadAnalogsCsv(currentRunId, currentTargetDate); } },
-  { id: "forecast-csv", label: "Forecast CSV", group: "data", handler: () => { if (currentRunId != null) downloadForecastCsv(currentRunId, currentTargetDate); }, enabled: () => currentMode === "forecast" },
-  { id: "val-csv", label: "Validation CSV", group: "data", handler: () => { if (currentValRunId != null) window.open(`/api/validation/${currentValRunId}/export/csv`, "_blank"); }, enabled: () => currentValRunId != null },
+  { id: "forecast-csv", label: "Forecast CSV", group: "data", handler: () => { if (currentRunId != null) downloadForecastCsv(currentRunId, currentTargetDate); }, enabled: () => currentMode === "forecast" && currentForecastData != null && (currentForecastData.hours?.length ?? 0) > 0 },
+  { id: "val-csv", label: "Validation CSV", group: "data", handler: () => { if (currentValRunId != null) window.open(`/api/validation/${currentValRunId}/export/csv`, "_blank"); }, enabled: () => currentValRunId != null && !valResults.hidden },
 ]);
 
 // Suppress unused-variable lint for exportMenu
