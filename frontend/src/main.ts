@@ -333,6 +333,7 @@ historyList.addEventListener("click", async (e) => {
     renderBiasQualityPanel(locationId, analysisRun, weatherRecords);
 
     const analogDates = analysisRun.analogs.map((a) => a.analog_date);
+    const librarySource = analysisRun.historical_source ?? "era5";
 
     getSeaBreezePanel(runId).then((panelData) => {
       renderSeaBreezeGauges(sbGaugesPanel, panelData);
@@ -342,7 +343,7 @@ historyList.addEventListener("click", async (e) => {
     }).catch(() => { seaBreezeSection.hidden = true; analogOverlaySection.hidden = true; featureRadarSection.hidden = true; });
 
     // Phase 6 panels (non-blocking)
-    renderPhase6Panels(runId, locationId, targetDate, analogDates).catch(() => {
+    renderPhase6Panels(runId, locationId, targetDate, analogDates, librarySource).catch(() => {
       seasonalHeatmapSection.hidden = true;
       distanceDistributionSection.hidden = true;
     });
@@ -429,7 +430,8 @@ analysisForm.addEventListener("submit", async (e) => {
 
     // Phase 6 panels (non-blocking)
     const analogDates = analysisRun.analogs.map((a) => a.analog_date);
-    renderPhase6Panels(analysisRun.id, locationId, targetDateInput.value, analogDates).catch(() => {
+    const p6Source = analysisRun.historical_source ?? "era5";
+    renderPhase6Panels(analysisRun.id, locationId, targetDateInput.value, analogDates, p6Source).catch(() => {
       seasonalHeatmapSection.hidden = true;
       distanceDistributionSection.hidden = true;
     });
@@ -579,10 +581,11 @@ async function renderPhase6Panels(
   locationId: number,
   targetDate: string,
   analogDates: string[],
+  historicalSource: string,
 ): Promise<void> {
   // Fetch both endpoints in parallel, non-blocking
   const [heatmapResult, distResult] = await Promise.allSettled([
-    getSeasonalHeatmap(locationId, "era5", targetDate, analogDates),
+    getSeasonalHeatmap(locationId, historicalSource, targetDate, analogDates),
     getDistanceDistribution(runId),
   ]);
 
