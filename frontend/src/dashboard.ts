@@ -1,4 +1,4 @@
-import type { AnalogResult, AnalysisRunDetail, BiasCorrection, LibraryStatusResponse, SeaBreezePanelData, WeatherRecord } from "./types";
+import type { AnalogResult, AnalysisRunDetail, BiasCorrection, ForecastCompositeData, LibraryStatusResponse, SeaBreezePanelData, WeatherRecord } from "./types";
 import { renderAnalogDonutChart } from "./charts";
 
 export function renderSummaryPanel(
@@ -408,8 +408,89 @@ export function renderAnalogProbability(
   }
 }
 
+// --- Forecast Composite ---
+
+export function renderForecastGateBadge(
+  container: HTMLElement,
+  data: ForecastCompositeData,
+): void {
+  const gate = data.gate_result;
+  const colorMap: Record<string, string> = {
+    high: "#2b8a3e",
+    medium: "#e67700",
+    low: "#c92a2a",
+  };
+  const color = colorMap[gate] ?? "#868e96";
+
+  if (gate === "low") {
+    container.innerHTML = `
+      <div style="padding:0.75rem;border-radius:0.5rem;background:#fff5f5;border:1px solid #ffc9c9;margin-bottom:1rem;">
+        <span style="display:inline-block;padding:0.2rem 0.6rem;border-radius:0.25rem;background:${color};color:#fff;font-weight:600;font-size:0.85rem;">Low sea breeze probability</span>
+        <span style="margin-left:0.5rem;color:#495057;font-size:0.9rem;">No forecast composite produced.</span>
+      </div>
+    `;
+  } else {
+    container.innerHTML = `
+      <div style="margin-bottom:0.75rem;">
+        <span style="display:inline-block;padding:0.2rem 0.6rem;border-radius:0.25rem;background:${color};color:#fff;font-weight:600;font-size:0.85rem;">${gate} sea breeze probability</span>
+        <span style="margin-left:0.5rem;color:#868e96;font-size:0.85rem;">Forecast composite from analog days</span>
+      </div>
+    `;
+  }
+}
+
+export function renderForecastTable(
+  container: HTMLElement,
+  data: ForecastCompositeData,
+): void {
+  if (!data.hours || data.hours.length === 0) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const headerRow = `
+    <thead>
+      <tr>
+        <th>Hour</th>
+        <th class="num">Median TWS (m/s)</th>
+        <th class="num">IQR (m/s)</th>
+        <th class="num">90% Range (m/s)</th>
+        <th class="num">Mean TWD</th>
+        <th class="num">Spread</th>
+        <th class="num">Analogs</th>
+      </tr>
+    </thead>
+  `;
+
+  const bodyRows = data.hours
+    .map((h) => {
+      const iqr = h.p25_tws != null && h.p75_tws != null
+        ? `${h.p25_tws.toFixed(1)}\u2013${h.p75_tws.toFixed(1)}`
+        : "\u2014";
+      const range90 = h.p10_tws != null && h.p90_tws != null
+        ? `${h.p10_tws.toFixed(1)}\u2013${h.p90_tws.toFixed(1)}`
+        : "\u2014";
+      const twd = h.circular_mean_twd != null ? `${h.circular_mean_twd.toFixed(0)}\u00b0` : "\u2014";
+      const spread = h.twd_circular_std != null ? `\u00b1${h.twd_circular_std.toFixed(0)}\u00b0` : "\u2014";
+      return `
+        <tr>
+          <td>${String(h.hour_local).padStart(2, "0")}:00</td>
+          <td class="num">${h.median_tws != null ? h.median_tws.toFixed(1) : "\u2014"}</td>
+          <td class="num">${iqr}</td>
+          <td class="num">${range90}</td>
+          <td class="num">${twd}</td>
+          <td class="num">${spread}</td>
+          <td class="num">${h.analog_count}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  container.innerHTML = `${headerRow}<tbody>${bodyRows}</tbody>`;
+}
+
 function fmt(value: number | null, decimals: number): string {
-  return value != null ? value.toFixed(decimals) : "—";
+  return value != null ? value.toFixed(decimals) : "\u2014";
 }
 
 function escapeHtml(text: string): string {

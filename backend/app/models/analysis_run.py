@@ -1,6 +1,7 @@
 from datetime import date, datetime
 
 from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -29,6 +30,7 @@ class AnalysisRun(Base):
     mode: Mapped[str | None] = mapped_column(String(31), nullable=True)
     forecast_source: Mapped[str | None] = mapped_column(String(63), nullable=True)
     historical_source: Mapped[str | None] = mapped_column(String(63), nullable=True)
+    forecast_composite: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

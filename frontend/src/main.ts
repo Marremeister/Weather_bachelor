@@ -6,6 +6,7 @@ import {
   getAnalysisRun,
   getBiasReport,
   getDistanceDistribution,
+  getForecastComposite,
   getLibraryStatus,
   getSeaBreezePanel,
   getSeasonalHeatmap,
@@ -13,7 +14,7 @@ import {
   listAnalysisRuns,
   runAnalysis,
 } from "./api";
-import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart } from "./charts";
+import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart } from "./charts";
 import {
   renderSummaryPanel,
   renderHourlyTable,
@@ -22,6 +23,8 @@ import {
   renderBiasTable,
   renderSeaBreezeGauges,
   renderAnalogProbability,
+  renderForecastGateBadge,
+  renderForecastTable,
 } from "./dashboard";
 import {
   downloadWeatherCsv,
@@ -38,8 +41,10 @@ import {
   downloadDirectionShiftChart,
   downloadSeasonalHeatmapChart,
   downloadDistanceHistogramChart,
+  downloadForecastChart,
+  downloadForecastCsv,
 } from "./export";
-import type { AnalogHourlyResponse, AnalysisRunDetail, Location, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, WeatherRecord } from "./types";
+import type { AnalogHourlyResponse, AnalysisRunDetail, ForecastCompositeData, Location, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, WeatherRecord } from "./types";
 import "./styles.css";
 
 // --- DOM refs ---
@@ -92,6 +97,15 @@ const distanceDistributionSection = document.getElementById("distance-distributi
 const distanceHistogramChartEl = document.getElementById("distance-histogram-chart")!;
 const exportDistanceHistogramPngBtn = document.getElementById("export-distance-histogram-png-btn") as HTMLButtonElement;
 
+// Forecast Composite
+const forecastCompositeSection = document.getElementById("forecast-composite-section")!;
+const forecastGateBadge = document.getElementById("forecast-gate-badge")!;
+const forecastChartEl = document.getElementById("forecast-chart")!;
+const forecastTableEl = document.getElementById("forecast-table")!;
+const forecastTracesToggle = document.getElementById("forecast-traces-toggle") as HTMLInputElement;
+const exportForecastPngBtn = document.getElementById("export-forecast-png-btn") as HTMLButtonElement;
+const exportForecastCsvBtn = document.getElementById("export-forecast-csv-btn") as HTMLButtonElement;
+
 // Wind rose
 const windroseSection = document.getElementById("windrose-section")!;
 const morningWindroseEl = document.getElementById("morning-windrose-chart")!;
@@ -135,6 +149,9 @@ let currentAnalogHourly: AnalogHourlyResponse | null = null;
 let currentAnalogMetric: "tws" | "twd" = "tws";
 let currentHeatmapData: SeasonalHeatmapData | null = null;
 let currentHeatmapColorMode: "speed" | "classification" = "speed";
+let currentForecastData: ForecastCompositeData | null = null;
+let currentForecastTraces: AnalogHourlyResponse | null = null;
+let forecastTracesVisible = false;
 
 // --- Init ---
 
@@ -342,6 +359,9 @@ historyList.addEventListener("click", async (e) => {
       renderAnalogOverlayPanel(runId, panelData);
     }).catch(() => { seaBreezeSection.hidden = true; analogOverlaySection.hidden = true; featureRadarSection.hidden = true; });
 
+    // Forecast composite (non-blocking)
+    renderForecastPanel(runId, mode).catch(() => { forecastCompositeSection.hidden = true; });
+
     // Phase 6 panels (non-blocking)
     renderPhase6Panels(runId, locationId, targetDate, analogDates, librarySource).catch(() => {
       seasonalHeatmapSection.hidden = true;
@@ -427,6 +447,9 @@ analysisForm.addEventListener("submit", async (e) => {
       seaBreezeSection.hidden = false;
       renderAnalogOverlayPanel(analysisRun.id, panelData);
     }).catch(() => { seaBreezeSection.hidden = true; analogOverlaySection.hidden = true; featureRadarSection.hidden = true; });
+
+    // Forecast composite (non-blocking)
+    renderForecastPanel(analysisRun.id, currentMode).catch(() => { forecastCompositeSection.hidden = true; });
 
     // Phase 6 panels (non-blocking)
     const analogDates = analysisRun.analogs.map((a) => a.analog_date);
@@ -631,6 +654,70 @@ exportSeasonalHeatmapPngBtn.addEventListener("click", () => {
 
 exportDistanceHistogramPngBtn.addEventListener("click", () => {
   downloadDistanceHistogramChart(currentTargetDate);
+});
+
+// --- Forecast Composite Panel ---
+
+async function renderForecastPanel(
+  runId: number,
+  mode: string,
+): Promise<void> {
+  // Hide for historical mode
+  if (mode !== "forecast") {
+    forecastCompositeSection.hidden = true;
+    return;
+  }
+
+  try {
+    const data = await getForecastComposite(runId);
+    currentForecastData = data;
+    forecastTracesVisible = false;
+    forecastTracesToggle.checked = false;
+    currentForecastTraces = null;
+
+    renderForecastGateBadge(forecastGateBadge, data);
+
+    if (data.gate_result !== "low" && data.hours && data.hours.length > 0) {
+      renderForecastChart(forecastChartEl, data);
+      renderForecastTable(forecastTableEl, data);
+    } else {
+      forecastChartEl.innerHTML = "";
+      forecastTableEl.innerHTML = "";
+    }
+
+    forecastCompositeSection.hidden = false;
+  } catch {
+    forecastCompositeSection.hidden = true;
+  }
+}
+
+// Forecast traces toggle
+forecastTracesToggle.addEventListener("change", async () => {
+  if (!currentForecastData || !currentRunId) return;
+
+  forecastTracesVisible = forecastTracesToggle.checked;
+
+  if (forecastTracesVisible && !currentForecastTraces) {
+    try {
+      currentForecastTraces = await getAnalogHourly(currentRunId);
+    } catch {
+      forecastTracesVisible = false;
+      forecastTracesToggle.checked = false;
+      return;
+    }
+  }
+
+  const traces = forecastTracesVisible ? currentForecastTraces?.analogs : undefined;
+  renderForecastChart(forecastChartEl, currentForecastData, traces, forecastTracesVisible);
+});
+
+// Forecast export buttons
+exportForecastPngBtn.addEventListener("click", () => {
+  downloadForecastChart(currentTargetDate);
+});
+
+exportForecastCsvBtn.addEventListener("click", () => {
+  if (currentRunId != null) downloadForecastCsv(currentRunId, currentTargetDate);
 });
 
 // --- Legacy classification ---

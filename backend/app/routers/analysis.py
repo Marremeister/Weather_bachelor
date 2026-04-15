@@ -24,6 +24,8 @@ from app.schemas.analog import (
     AnalysisRunDetailResponse,
     AnalysisRunResponse,
     DayHourlyRecords,
+    ForecastCompositeHour,
+    ForecastCompositeResponse,
 )
 from app.schemas.weather import WeatherRecordResponse
 from app.schemas.features import (
@@ -274,6 +276,7 @@ def export_analysis_json(
     payload = {
         "analysis_run": run_response.model_dump(mode="json"),
         "analogs": [a.model_dump(mode="json") for a in analog_responses],
+        "forecast_composite": run.forecast_composite,
         "weather_records": [
             {
                 "valid_time_utc": r.valid_time_utc.isoformat() if r.valid_time_utc else None,
@@ -560,6 +563,76 @@ def get_distance_distribution(
     )
 
 
+@router.get("/{run_id}/forecast", response_model=ForecastCompositeResponse)
+def get_forecast_composite(
+    run_id: int,
+    db: Session = Depends(get_db),
+):
+    """Return the forecast composite for a run (if available)."""
+    run = db.get(AnalysisRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+
+    composite = run.forecast_composite
+    if composite is None:
+        raise HTTPException(status_code=404, detail="No forecast composite available for this run")
+
+    gate_result = composite.get("gate_result", "low")
+    raw_hours = composite.get("hours")
+    hours: list[ForecastCompositeHour] | None = None
+    if raw_hours:
+        hours = [ForecastCompositeHour(**h) for h in raw_hours]
+
+    return ForecastCompositeResponse(
+        run_id=run.id,
+        gate_result=gate_result,
+        hours=hours,
+        summary=run.summary,
+    )
+
+
+@router.get("/{run_id}/export/forecast-csv")
+def export_forecast_csv(
+    run_id: int,
+    db: Session = Depends(get_db),
+):
+    """Export forecast composite hours as CSV."""
+    run = db.get(AnalysisRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+
+    composite = run.forecast_composite
+    if composite is None or not composite.get("hours"):
+        raise HTTPException(status_code=404, detail="No forecast composite hours available")
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "hour_local", "median_tws", "p25_tws", "p75_tws", "p10_tws", "p90_tws",
+        "circular_mean_twd", "twd_circular_std", "twd_arc_radius_75", "analog_count",
+    ])
+    for h in composite["hours"]:
+        writer.writerow([
+            h.get("hour_local", ""),
+            h.get("median_tws", ""),
+            h.get("p25_tws", ""),
+            h.get("p75_tws", ""),
+            h.get("p10_tws", ""),
+            h.get("p90_tws", ""),
+            h.get("circular_mean_twd", ""),
+            h.get("twd_circular_std", ""),
+            h.get("twd_arc_radius_75", ""),
+            h.get("analog_count", ""),
+        ])
+
+    filename = f"forecast_{run.target_date.isoformat()}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 def _run_dict(run: AnalysisRun) -> dict:
     """Convert an AnalysisRun ORM object to a dict for Pydantic validation."""
     return {
@@ -576,5 +649,6 @@ def _run_dict(run: AnalysisRun) -> dict:
         "mode": run.mode,
         "forecast_source": run.forecast_source,
         "historical_source": run.historical_source,
+        "forecast_composite": run.forecast_composite,
         "created_at": run.created_at,
     }

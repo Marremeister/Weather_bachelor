@@ -14,7 +14,7 @@ import {
   VisualMapPiecewiseComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
-import type { WeatherRecord, BiasCorrection, DayHourlyRecords, SeaBreezePanelData, SeasonalHeatmapData, DistanceDistributionData } from "./types";
+import type { WeatherRecord, BiasCorrection, DayHourlyRecords, SeaBreezePanelData, SeasonalHeatmapData, DistanceDistributionData, ForecastCompositeData, DayHourlyRecords as DayHourly } from "./types";
 
 use([
   LineChart,
@@ -50,6 +50,7 @@ let featureRadarChart: ECharts | null = null;
 let directionShiftChart: ECharts | null = null;
 let seasonalHeatmapChart: ECharts | null = null;
 let distanceHistogramChart: ECharts | null = null;
+let forecastChart: ECharts | null = null;
 
 export function renderWindOverlayChart(
   container: HTMLElement,
@@ -1361,6 +1362,203 @@ export function getDistanceHistogramChart(): ECharts | null {
   return distanceHistogramChart;
 }
 
+// --- Forecast Composite Chart ---
+
+export function renderForecastChart(
+  container: HTMLElement,
+  data: ForecastCompositeData,
+  analogTraces?: DayHourlyRecords[],
+  showTraces?: boolean,
+): void {
+  if (forecastChart) forecastChart.dispose();
+
+  if (!data.hours || data.hours.length === 0) return;
+
+  forecastChart = init(container);
+
+  const hours = data.hours;
+  const xLabels = hours.map((h) => `${String(h.hour_local).padStart(2, "0")}:00`);
+
+  // TWS data
+  const medianData = hours.map((h) => h.median_tws);
+  const p25Data = hours.map((h) => h.p25_tws);
+  const p75Data = hours.map((h) => h.p75_tws);
+  const p10Data = hours.map((h) => h.p10_tws);
+  const p90Data = hours.map((h) => h.p90_tws);
+
+  // TWD data
+  const twdData = hours.map((h) => h.circular_mean_twd);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const series: any[] = [
+    // 10-90 band (lighter)
+    {
+      name: "P10",
+      type: "line",
+      data: p10Data,
+      lineStyle: { opacity: 0 },
+      itemStyle: { opacity: 0 },
+      stack: "band90",
+      symbol: "none",
+      z: 1,
+    },
+    {
+      name: "P10-P90",
+      type: "line",
+      data: hours.map((h) =>
+        h.p90_tws != null && h.p10_tws != null ? h.p90_tws - h.p10_tws : null,
+      ),
+      lineStyle: { opacity: 0 },
+      itemStyle: { opacity: 0 },
+      areaStyle: { color: "rgba(34,139,230,0.10)" },
+      stack: "band90",
+      symbol: "none",
+      z: 1,
+    },
+    // 25-75 band (darker)
+    {
+      name: "P25",
+      type: "line",
+      data: p25Data,
+      lineStyle: { opacity: 0 },
+      itemStyle: { opacity: 0 },
+      stack: "band75",
+      symbol: "none",
+      z: 2,
+    },
+    {
+      name: "P25-P75 (IQR)",
+      type: "line",
+      data: hours.map((h) =>
+        h.p75_tws != null && h.p25_tws != null ? h.p75_tws - h.p25_tws : null,
+      ),
+      lineStyle: { opacity: 0 },
+      itemStyle: { opacity: 0 },
+      areaStyle: { color: "rgba(34,139,230,0.22)" },
+      stack: "band75",
+      symbol: "none",
+      z: 2,
+    },
+    // Median line
+    {
+      name: "Median TWS",
+      type: "line",
+      data: medianData,
+      smooth: true,
+      symbol: "circle",
+      symbolSize: 6,
+      lineStyle: { color: "#228be6", width: 3 },
+      itemStyle: { color: "#228be6" },
+      z: 5,
+    },
+    // TWD scatter on secondary axis
+    {
+      name: "Mean TWD",
+      type: "scatter",
+      yAxisIndex: 1,
+      data: twdData,
+      symbolSize: 8,
+      itemStyle: { color: "#e67700" },
+      z: 5,
+    },
+  ];
+
+  // Optional analog trace lines
+  if (showTraces && analogTraces && analogTraces.length > 0) {
+    const traceColors = ["#adb5bd", "#ced4da", "#868e96", "#dee2e6", "#495057"];
+    analogTraces.forEach((analog, i) => {
+      const traceData = xLabels.map((_, hi) => {
+        const targetHour = hours[hi].hour_local;
+        const rec = analog.records.find(
+          (r) => new Date(r.valid_time_local).getHours() === targetHour,
+        );
+        return rec?.true_wind_speed ?? null;
+      });
+      series.push({
+        name: `#${analog.rank ?? i + 1} (${analog.date})`,
+        type: "line",
+        data: traceData,
+        smooth: true,
+        symbol: "none",
+        lineStyle: {
+          color: traceColors[i % traceColors.length],
+          width: 1,
+          type: "dotted",
+        },
+        z: 3,
+      });
+    });
+  }
+
+  forecastChart.setOption({
+    tooltip: {
+      trigger: "axis",
+      formatter(params: unknown) {
+        const items = params as Array<{
+          axisValueLabel: string;
+          seriesName: string;
+          value: number | null;
+          color: string;
+        }>;
+        if (!items.length) return "";
+        const hourLabel = items[0].axisValueLabel;
+        // Find the data for this hour
+        const hi = xLabels.indexOf(hourLabel);
+        const h = hi >= 0 ? hours[hi] : null;
+        if (!h) return hourLabel;
+
+        let html = `<strong>${hourLabel}</strong>`;
+        html += `<br/>Median TWS: ${h.median_tws != null ? h.median_tws.toFixed(1) : "N/A"} m/s`;
+        html += `<br/>IQR: ${h.p25_tws != null ? h.p25_tws.toFixed(1) : "?"}\u2013${h.p75_tws != null ? h.p75_tws.toFixed(1) : "?"} m/s`;
+        html += `<br/>90% range: ${h.p10_tws != null ? h.p10_tws.toFixed(1) : "?"}\u2013${h.p90_tws != null ? h.p90_tws.toFixed(1) : "?"} m/s`;
+        html += `<br/>Mean TWD: ${h.circular_mean_twd != null ? h.circular_mean_twd.toFixed(0) : "N/A"}\u00b0`;
+        if (h.twd_circular_std != null) {
+          html += ` (\u00b1${h.twd_circular_std.toFixed(0)}\u00b0)`;
+        }
+        html += `<br/>Analogs: ${h.analog_count}`;
+        return html;
+      },
+    },
+    legend: {
+      top: 0,
+      left: "center",
+      data: ["Median TWS", "P25-P75 (IQR)", "Mean TWD"],
+    },
+    grid: { left: 50, right: 65, top: 35, bottom: 50 },
+    xAxis: {
+      type: "category",
+      data: xLabels,
+      axisLabel: { fontSize: 12 },
+    },
+    yAxis: [
+      {
+        type: "value",
+        name: "m/s",
+        nameLocation: "middle",
+        nameGap: 35,
+      },
+      {
+        type: "value",
+        name: "Direction",
+        min: 0,
+        max: 360,
+        interval: 90,
+        axisLabel: {
+          formatter(value: number) {
+            const labels: Record<number, string> = { 0: "N", 90: "E", 180: "S", 270: "W", 360: "N" };
+            return labels[value] ?? `${value}\u00b0`;
+          },
+        },
+      },
+    ],
+    series,
+  });
+}
+
+export function getForecastChart(): ECharts | null {
+  return forecastChart;
+}
+
 function handleResize() {
   windOverlayChart?.resize();
   tempPressureChart?.resize();
@@ -1374,6 +1572,7 @@ function handleResize() {
   directionShiftChart?.resize();
   seasonalHeatmapChart?.resize();
   distanceHistogramChart?.resize();
+  forecastChart?.resize();
 }
 
 window.addEventListener("resize", handleResize);

@@ -1,4 +1,4 @@
-import type { AnalogHourlyResponse, AnalysisRequest, AnalysisRunDetail, AnalysisRunSummary, AnalogResult, BiasReportResponse, DistanceDistributionData, HealthResponse, LibraryStatusResponse, Location, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, WeatherFetchResponse, WeatherRecord } from "./types";
+import type { AnalogHourlyResponse, AnalysisRequest, AnalysisRunDetail, AnalysisRunSummary, AnalogResult, BiasReportResponse, DistanceDistributionData, ForecastCompositeData, HealthResponse, LibraryStatusResponse, Location, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, WeatherFetchResponse, WeatherRecord } from "./types";
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch("/api/health");
@@ -222,4 +222,12 @@ export async function getDistanceDistribution(
   const res = await fetch(`/api/analysis/${runId}/distance-distribution`);
   if (!res.ok) throw new Error(`Distance distribution fetch failed: ${res.status}`);
   return res.json() as Promise<DistanceDistributionData>;
+}
+
+export async function getForecastComposite(
+  runId: number,
+): Promise<ForecastCompositeData> {
+  const res = await fetch(`/api/analysis/${runId}/forecast`);
+  if (!res.ok) throw new Error(`Forecast composite fetch failed: ${res.status}`);
+  return res.json() as Promise<ForecastCompositeData>;
 }

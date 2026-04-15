@@ -19,6 +19,7 @@ from app.schemas.analog import AnalogCandidate
 from app.schemas.features import AnalysisWindow, DailyFeatures
 from app.services.feature_service import compute_daily_features, compute_feature_config_hash
 from app.services.library_service import get_precomputed_features
+from app.services.forecast_service import generate_forecast_composite
 from app.services.weather_provider import WeatherProvider
 from app.services.weather_service import fetch_weather, get_provider
 
@@ -549,6 +550,17 @@ def run_analog_analysis(
 
         run.status = "completed"
         run.finished_at = datetime.now(tz=ZoneInfo("UTC"))
+
+        # Generate forecast composite for forecast-mode runs (non-fatal)
+        if mode == "forecast" and candidates:
+            try:
+                composite = generate_forecast_composite(db, run)
+                if composite and composite.get("gate_result") == "low":
+                    run.summary = "Sea breeze probability low. No forecast produced."
+            except Exception:
+                logger.exception(
+                    "Forecast composite failed for run %d (non-fatal)", run.id,
+                )
 
         # Add model run metadata to summary for forecast mode
         if mode == "forecast":

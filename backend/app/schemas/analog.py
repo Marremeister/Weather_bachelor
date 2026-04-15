@@ -57,6 +57,7 @@ class AnalysisRunResponse(BaseModel):
     mode: str | None = None
     forecast_source: str | None = None
     historical_source: str | None = None
+    forecast_composite: dict | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -77,3 +78,23 @@ class AnalogHourlyResponse(BaseModel):
     run_id: int
     target: DayHourlyRecords
     analogs: list[DayHourlyRecords]
+
+
+class ForecastCompositeHour(BaseModel):
+    hour_local: int
+    median_tws: float | None = None
+    p25_tws: float | None = None
+    p75_tws: float | None = None
+    p10_tws: float | None = None
+    p90_tws: float | None = None
+    circular_mean_twd: float | None = None
+    twd_circular_std: float | None = None
+    twd_arc_radius_75: float | None = None
+    analog_count: int = 0
+
+
+class ForecastCompositeResponse(BaseModel):
+    run_id: int
+    gate_result: str
+    hours: list[ForecastCompositeHour] | None = None
+    summary: str | None = None

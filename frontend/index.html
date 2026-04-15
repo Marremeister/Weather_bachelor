@@ -84,6 +84,25 @@
         </div>
       </section>
 
+      <!-- Forecast Composite -->
+      <section id="forecast-composite-section" class="card" hidden>
+        <div class="section-header">
+          <h2>Forecast Composite</h2>
+          <div class="export-toolbar">
+            <label class="trace-toggle">
+              <input type="checkbox" id="forecast-traces-toggle" /> Show analog traces
+            </label>
+            <button id="export-forecast-png-btn" class="btn-export">Save PNG</button>
+            <button id="export-forecast-csv-btn" class="btn-export">Export CSV</button>
+          </div>
+        </div>
+        <div id="forecast-gate-badge"></div>
+        <div id="forecast-chart" class="chart-container"></div>
+        <div class="table-scroll">
+          <table id="forecast-table" class="data-table"></table>
+        </div>
+      </section>
+
       <!-- Analog Overlay Charts -->
       <section id="analog-overlay-section" class="charts-row" hidden>
         <div class="card chart-card">

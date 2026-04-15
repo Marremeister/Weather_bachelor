@@ -54,6 +54,45 @@ def circular_mean(degrees: list[float]) -> float:
     return float(result)
 
 
+def circular_std(degrees: list[float]) -> float:
+    """Circular standard deviation (Mardia-Jupp formula), result in degrees.
+
+    Formula: sqrt(-2 * ln(R)) converted to degrees, where R is the mean
+    resultant length.  Capped at 180 degrees.  Returns NaN if empty.
+    """
+    clean = [d for d in degrees if d is not None and not math.isnan(d)]
+    if not clean:
+        return float("nan")
+    rads = np.deg2rad(clean)
+    mean_sin = float(np.mean(np.sin(rads)))
+    mean_cos = float(np.mean(np.cos(rads)))
+    R = math.sqrt(mean_sin**2 + mean_cos**2)
+    if R >= 1.0:
+        return 0.0
+    if R <= 0.0:
+        return 180.0
+    return min(float(np.rad2deg(math.sqrt(-2.0 * math.log(R)))), 180.0)
+
+
+def circular_arc_radius(degrees: list[float], percentile: float = 75.0) -> float:
+    """Return the *percentile*-rank circular distance from the circular mean.
+
+    Useful for describing the angular spread: e.g. 75th-percentile arc
+    radius tells you that 75 % of observations are within this many degrees
+    of the mean direction.  Returns NaN if empty.
+    """
+    clean = [d for d in degrees if d is not None and not math.isnan(d)]
+    if not clean:
+        return float("nan")
+    mean_deg = circular_mean(clean)
+    if math.isnan(mean_deg):
+        return float("nan")
+    # Compute absolute circular distances from the mean
+    dists = [abs(((d - mean_deg) + 180) % 360 - 180) for d in clean]
+    dists.sort()
+    return float(np.percentile(dists, percentile))
+
+
 def direction_difference(a: float, b: float) -> float:
     """Signed angular difference in [-180, +180]."""
     if a is None or b is None or math.isnan(a) or math.isnan(b):

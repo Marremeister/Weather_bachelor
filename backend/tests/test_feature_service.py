@@ -8,7 +8,9 @@ import pytest
 
 from app.schemas.features import AnalysisWindow
 from app.services.feature_service import (
+    circular_arc_radius,
     circular_mean,
+    circular_std,
     compute_daily_features,
     direction_difference,
     is_in_sector,
@@ -58,6 +60,59 @@ class TestCircularMean:
     def test_filters_nan(self):
         result = circular_mean([90.0, float("nan"), 90.0])
         assert abs(result - 90.0) < 0.1
+
+
+# ---------------------------------------------------------------------------
+# circular_std
+# ---------------------------------------------------------------------------
+
+class TestCircularStd:
+    def test_identical_directions(self):
+        result = circular_std([180.0, 180.0, 180.0])
+        assert result == 0.0
+
+    def test_spread_directions(self):
+        result = circular_std([0.0, 90.0, 180.0, 270.0])
+        assert result > 0
+        assert result <= 180.0
+
+    def test_empty(self):
+        result = circular_std([])
+        assert math.isnan(result)
+
+    def test_wrap_around(self):
+        result = circular_std([350.0, 10.0])
+        assert result < 30.0
+
+    def test_nan_filtered(self):
+        result = circular_std([90.0, float("nan"), 90.0])
+        assert result == 0.0
+
+
+# ---------------------------------------------------------------------------
+# circular_arc_radius
+# ---------------------------------------------------------------------------
+
+class TestCircularArcRadius:
+    def test_tight_cluster(self):
+        result = circular_arc_radius([100.0, 102.0, 98.0, 101.0, 99.0])
+        assert result < 10.0
+        assert result >= 0.0
+
+    def test_empty(self):
+        result = circular_arc_radius([])
+        assert math.isnan(result)
+
+    def test_wider_spread(self):
+        tight = circular_arc_radius([100.0, 102.0, 98.0])
+        wide = circular_arc_radius([100.0, 140.0, 60.0])
+        assert wide > tight
+
+    def test_percentile_param(self):
+        values = [100.0, 110.0, 120.0, 130.0, 140.0]
+        p50 = circular_arc_radius(values, percentile=50.0)
+        p90 = circular_arc_radius(values, percentile=90.0)
+        assert p90 >= p50
 
 
 # ---------------------------------------------------------------------------

@@ -209,3 +209,23 @@ export interface DistanceDistributionData {
   entries: DistanceEntry[];
   top_n_dates: string[];
 }
+
+export interface ForecastCompositeHour {
+  hour_local: number;
+  median_tws: number | null;
+  p25_tws: number | null;
+  p75_tws: number | null;
+  p10_tws: number | null;
+  p90_tws: number | null;
+  circular_mean_twd: number | null;
+  twd_circular_std: number | null;
+  twd_arc_radius_75: number | null;
+  analog_count: number;
+}
+
+export interface ForecastCompositeData {
+  run_id: number;
+  gate_result: string;
+  hours: ForecastCompositeHour[] | null;
+  summary: string | null;
+}

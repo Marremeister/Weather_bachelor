@@ -10,6 +10,7 @@ import {
   getDirectionShiftChart,
   getSeasonalHeatmapChart,
   getDistanceHistogramChart,
+  getForecastChart,
 } from "./charts";
 
 function triggerDownload(url: string, filename: string): void {
@@ -117,4 +118,18 @@ export function downloadDistanceHistogramChart(targetDate: string): void {
   if (!chart) return;
   const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
   triggerDownload(url, `distance_histogram_${targetDate}.png`);
+}
+
+export function downloadForecastChart(targetDate: string): void {
+  const chart = getForecastChart();
+  if (!chart) return;
+  const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
+  triggerDownload(url, `forecast_composite_${targetDate}.png`);
+}
+
+export function downloadForecastCsv(runId: number, targetDate: string): void {
+  triggerDownload(
+    `/api/analysis/${runId}/export/forecast-csv`,
+    `forecast_${targetDate}.csv`,
+  );
 }
