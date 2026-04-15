@@ -2,6 +2,7 @@ import {
   fetchClassification,
   fetchHealth,
   fetchLocations,
+  getAnalogHourly,
   getAnalysisRun,
   getBiasReport,
   getLibraryStatus,
@@ -10,7 +11,7 @@ import {
   listAnalysisRuns,
   runAnalysis,
 } from "./api";
-import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart } from "./charts";
+import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart } from "./charts";
 import {
   renderSummaryPanel,
   renderHourlyTable,
@@ -29,8 +30,10 @@ import {
   downloadMorningWindRoseChart,
   downloadAfternoonWindRoseChart,
   downloadBiasChart,
+  downloadAnalogOverlayChart,
+  downloadSpeedIncreaseChart,
 } from "./export";
-import type { AnalysisRunDetail, Location, SeaBreezeClassification, WeatherRecord } from "./types";
+import type { AnalogHourlyResponse, AnalysisRunDetail, Location, SeaBreezeClassification, SeaBreezePanelData, WeatherRecord } from "./types";
 import "./styles.css";
 
 // --- DOM refs ---
@@ -58,6 +61,14 @@ const analogTable = document.getElementById("analog-table")!;
 const seaBreezeSection = document.getElementById("sea-breeze-section")!;
 const sbGaugesPanel = document.getElementById("sb-gauges-panel")!;
 const sbProbabilityPanel = document.getElementById("sb-probability-panel")!;
+
+// Analog Overlay
+const analogOverlaySection = document.getElementById("analog-overlay-section")!;
+const analogOverlayChartEl = document.getElementById("analog-overlay-chart")!;
+const speedIncreaseChartEl = document.getElementById("speed-increase-chart")!;
+const analogMetricToggle = document.getElementById("analog-metric-toggle")!;
+const exportAnalogOverlayPngBtn = document.getElementById("export-analog-overlay-png-btn") as HTMLButtonElement;
+const exportSpeedIncreasePngBtn = document.getElementById("export-speed-increase-png-btn") as HTMLButtonElement;
 
 // Wind rose
 const windroseSection = document.getElementById("windrose-section")!;
@@ -98,6 +109,8 @@ let locations: Location[] = [];
 let currentRunId: number | null = null;
 let currentTargetDate = "";
 let currentMode: "historical" | "forecast" = "historical";
+let currentAnalogHourly: AnalogHourlyResponse | null = null;
+let currentAnalogMetric: "tws" | "twd" = "tws";
 
 // --- Init ---
 
@@ -299,7 +312,8 @@ historyList.addEventListener("click", async (e) => {
       renderSeaBreezeGauges(sbGaugesPanel, panelData);
       renderAnalogProbability(sbProbabilityPanel, panelData);
       seaBreezeSection.hidden = false;
-    }).catch(() => { seaBreezeSection.hidden = true; });
+      renderAnalogOverlayPanel(runId, panelData);
+    }).catch(() => { seaBreezeSection.hidden = true; analogOverlaySection.hidden = true; });
   } catch (err) {
     showError(err instanceof Error ? err.message : "Failed to load run.");
   } finally {
@@ -378,7 +392,8 @@ analysisForm.addEventListener("submit", async (e) => {
       renderSeaBreezeGauges(sbGaugesPanel, panelData);
       renderAnalogProbability(sbProbabilityPanel, panelData);
       seaBreezeSection.hidden = false;
-    }).catch(() => { seaBreezeSection.hidden = true; });
+      renderAnalogOverlayPanel(analysisRun.id, panelData);
+    }).catch(() => { seaBreezeSection.hidden = true; analogOverlaySection.hidden = true; });
 
     // Refresh history to include this new run
     loadHistory();
@@ -455,6 +470,53 @@ async function renderBiasQualityPanel(
 
 exportBiasPngBtn.addEventListener("click", () => {
   downloadBiasChart(currentTargetDate);
+});
+
+// --- Analog Overlay Panel ---
+
+async function renderAnalogOverlayPanel(
+  runId: number,
+  panelData: SeaBreezePanelData,
+): Promise<void> {
+  try {
+    const data = await getAnalogHourly(runId);
+    currentAnalogHourly = data;
+    currentAnalogMetric = "tws";
+
+    // Reset toggle to TWS
+    for (const btn of analogMetricToggle.querySelectorAll<HTMLButtonElement>(".toggle-btn")) {
+      btn.classList.toggle("active", btn.dataset.metric === "tws");
+    }
+
+    renderAnalogOverlayChart(analogOverlayChartEl, data.target, data.analogs, "tws");
+    renderWindSpeedIncreaseChart(speedIncreaseChartEl, panelData);
+    analogOverlaySection.hidden = false;
+  } catch {
+    analogOverlaySection.hidden = true;
+  }
+}
+
+// TWS / TWD toggle
+analogMetricToggle.addEventListener("click", (e) => {
+  const btn = (e.target as HTMLElement).closest(".toggle-btn") as HTMLButtonElement | null;
+  if (!btn || !currentAnalogHourly) return;
+  const metric = btn.dataset.metric as "tws" | "twd";
+  if (metric === currentAnalogMetric) return;
+
+  currentAnalogMetric = metric;
+  for (const b of analogMetricToggle.querySelectorAll<HTMLButtonElement>(".toggle-btn")) {
+    b.classList.toggle("active", b.dataset.metric === metric);
+  }
+  renderAnalogOverlayChart(analogOverlayChartEl, currentAnalogHourly.target, currentAnalogHourly.analogs, metric);
+});
+
+// Analog overlay export buttons
+exportAnalogOverlayPngBtn.addEventListener("click", () => {
+  downloadAnalogOverlayChart(currentTargetDate);
+});
+
+exportSpeedIncreasePngBtn.addEventListener("click", () => {
+  downloadSpeedIncreaseChart(currentTargetDate);
 });
 
 // --- Legacy classification ---

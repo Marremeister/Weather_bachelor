@@ -9,7 +9,7 @@ import {
   PolarComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
-import type { WeatherRecord, BiasCorrection } from "./types";
+import type { WeatherRecord, BiasCorrection, DayHourlyRecords, SeaBreezePanelData } from "./types";
 
 use([
   LineChart,
@@ -32,6 +32,8 @@ let morningWindRoseChart: ECharts | null = null;
 let afternoonWindRoseChart: ECharts | null = null;
 let biasChart: ECharts | null = null;
 let analogDonutChart: ECharts | null = null;
+let analogOverlayChart: ECharts | null = null;
+let speedIncreaseChart: ECharts | null = null;
 
 export function renderWindOverlayChart(
   container: HTMLElement,
@@ -577,6 +579,218 @@ export function renderAnalogDonutChart(
   });
 }
 
+// --- Analog Overlay Chart ---
+
+const ANALOG_COLORS = ["#e67700", "#2b8a3e", "#7048e8"];
+
+export function renderAnalogOverlayChart(
+  container: HTMLElement,
+  target: DayHourlyRecords,
+  analogs: DayHourlyRecords[],
+  metric: "tws" | "twd",
+): void {
+  if (analogOverlayChart) analogOverlayChart.dispose();
+  analogOverlayChart = init(container);
+
+  // Build a shared time axis from the target's records (by hour)
+  const timeLabels: string[] = [];
+  const hourToIdx = new Map<number, number>();
+  for (const r of target.records) {
+    const d = new Date(r.valid_time_local);
+    const h = d.getHours();
+    if (!hourToIdx.has(h)) {
+      hourToIdx.set(h, timeLabels.length);
+      timeLabels.push(d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    }
+  }
+
+  function extractByHour(records: WeatherRecord[]): (number | null)[] {
+    const arr: (number | null)[] = new Array(timeLabels.length).fill(null);
+    for (const r of records) {
+      const h = new Date(r.valid_time_local).getHours();
+      const idx = hourToIdx.get(h);
+      if (idx !== undefined) {
+        arr[idx] = metric === "tws" ? r.true_wind_speed : r.true_wind_direction;
+      }
+    }
+    return arr;
+  }
+
+  const isTWS = metric === "tws";
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const series: any[] = [
+    {
+      name: `Target (${target.date})`,
+      type: "line",
+      data: extractByHour(target.records),
+      smooth: true,
+      symbol: "circle",
+      symbolSize: 5,
+      lineStyle: { color: "#228be6", width: 3 },
+      itemStyle: { color: "#228be6" },
+    },
+  ];
+
+  analogs.forEach((analog, i) => {
+    const color = ANALOG_COLORS[i % ANALOG_COLORS.length];
+    series.push({
+      name: `#${analog.rank} (${analog.date})`,
+      type: "line",
+      data: extractByHour(analog.records),
+      smooth: true,
+      symbol: "circle",
+      symbolSize: 3,
+      lineStyle: { color, width: 1.5, type: "dashed" },
+      itemStyle: { color },
+    });
+  });
+
+  const yAxisConfig = isTWS
+    ? { type: "value" as const, name: "m/s", nameLocation: "middle" as const, nameGap: 35 }
+    : {
+        type: "value" as const,
+        name: "Direction",
+        min: 0,
+        max: 360,
+        interval: 90,
+        axisLabel: {
+          formatter(value: number) {
+            const labels: Record<number, string> = { 0: "N", 90: "E", 180: "S", 270: "W", 360: "N" };
+            return labels[value] ?? `${value}°`;
+          },
+        },
+      };
+
+  analogOverlayChart.setOption({
+    tooltip: {
+      trigger: "axis",
+      formatter(params: unknown) {
+        const items = params as Array<{
+          axisValueLabel: string;
+          seriesName: string;
+          value: number | null;
+          color: string;
+        }>;
+        if (!items.length) return "";
+        let html = items[0].axisValueLabel;
+        for (const item of items) {
+          const val =
+            item.value != null
+              ? isTWS
+                ? `${item.value.toFixed(1)} m/s`
+                : `${item.value}°`
+              : "N/A";
+          html += `<br/><span style="color:${item.color}">●</span> ${item.seriesName}: ${val}`;
+        }
+        return html;
+      },
+    },
+    legend: { top: 0, left: "center" },
+    grid: { left: 50, right: 20, top: 35, bottom: 50 },
+    xAxis: {
+      type: "category",
+      data: timeLabels,
+      axisLabel: { rotate: 45, fontSize: 11 },
+    },
+    yAxis: yAxisConfig,
+    dataZoom: [{ type: "inside" }],
+    series,
+  });
+}
+
+export function getAnalogOverlayChart(): ECharts | null {
+  return analogOverlayChart;
+}
+
+// --- Wind Speed Increase Comparison Bar Chart ---
+
+export function renderWindSpeedIncreaseChart(
+  container: HTMLElement,
+  panelData: SeaBreezePanelData,
+): void {
+  if (speedIncreaseChart) speedIncreaseChart.dispose();
+
+  // Build data: target first, then analogs
+  const labels: string[] = [];
+  const values: (number | null)[] = [];
+  const colors: string[] = [];
+
+  if (panelData.target) {
+    labels.push(`Target (${panelData.target.date})`);
+    values.push(panelData.target.features.wind_speed_increase);
+    colors.push("#228be6");
+  }
+
+  for (const analog of panelData.analogs) {
+    labels.push(analog.date);
+    values.push(analog.features.wind_speed_increase);
+    colors.push("#adb5bd");
+  }
+
+  // Reverse for horizontal bar (bottom-to-top order)
+  labels.reverse();
+  values.reverse();
+  colors.reverse();
+
+  // Dynamic height: 40px per bar, minimum 200px
+  const dynamicHeight = Math.max(200, labels.length * 40 + 80);
+  container.style.height = `${dynamicHeight}px`;
+
+  speedIncreaseChart = init(container);
+
+  speedIncreaseChart.setOption({
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter(params: unknown) {
+        const items = params as Array<{
+          axisValueLabel: string;
+          value: number | null;
+        }>;
+        if (!items.length) return "";
+        const item = items[0];
+        const val = item.value != null ? `${item.value.toFixed(2)} m/s` : "N/A";
+        return `${item.axisValueLabel}: ${val}`;
+      },
+    },
+    grid: { left: 140, right: 60, top: 10, bottom: 10 },
+    xAxis: {
+      type: "value",
+      name: "m/s",
+      nameLocation: "middle",
+      nameGap: 25,
+    },
+    yAxis: {
+      type: "category",
+      data: labels,
+      axisLabel: { fontSize: 11 },
+    },
+    series: [
+      {
+        type: "bar",
+        data: values.map((v, i) => ({
+          value: v,
+          itemStyle: { color: colors[i] },
+        })),
+        barWidth: "60%",
+        label: {
+          show: true,
+          position: "right",
+          formatter(params: { value: number | null }) {
+            return params.value != null ? `${params.value.toFixed(2)}` : "";
+          },
+          fontSize: 11,
+        },
+      },
+    ],
+  });
+}
+
+export function getSpeedIncreaseChart(): ECharts | null {
+  return speedIncreaseChart;
+}
+
 function handleResize() {
   windOverlayChart?.resize();
   tempPressureChart?.resize();
@@ -584,6 +798,8 @@ function handleResize() {
   afternoonWindRoseChart?.resize();
   biasChart?.resize();
   analogDonutChart?.resize();
+  analogOverlayChart?.resize();
+  speedIncreaseChart?.resize();
 }
 
 window.addEventListener("resize", handleResize);

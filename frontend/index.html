@@ -84,6 +84,30 @@
         </div>
       </section>
 
+      <!-- Analog Overlay Charts -->
+      <section id="analog-overlay-section" class="charts-row" hidden>
+        <div class="card chart-card">
+          <div class="section-header">
+            <h3>Target vs Analog Wind Curves</h3>
+            <div class="export-toolbar">
+              <div class="toggle-group" id="analog-metric-toggle">
+                <button class="toggle-btn active" data-metric="tws">TWS</button>
+                <button class="toggle-btn" data-metric="twd">TWD</button>
+              </div>
+              <button id="export-analog-overlay-png-btn" class="btn-export">Save PNG</button>
+            </div>
+          </div>
+          <div id="analog-overlay-chart" class="chart-container"></div>
+        </div>
+        <div class="card chart-card">
+          <div class="section-header">
+            <h3>Wind Speed Increase Comparison</h3>
+            <button id="export-speed-increase-png-btn" class="btn-export">Save PNG</button>
+          </div>
+          <div id="speed-increase-chart" class="chart-container"></div>
+        </div>
+      </section>
+
       <!-- Charts Row -->
       <section id="charts-section" class="charts-row" hidden>
         <div class="card chart-card">

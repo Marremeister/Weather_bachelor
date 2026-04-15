@@ -667,6 +667,14 @@ body {
   height: 220px;
 }
 
+/* Toggle group */
+
+.toggle-group { display: inline-flex; border: 1px solid #dee2e6; border-radius: 5px; overflow: hidden; }
+.toggle-btn { padding: 0.25rem 0.65rem; background: #fff; color: #495057; border: none; border-right: 1px solid #dee2e6; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+.toggle-btn:last-child { border-right: none; }
+.toggle-btn.active { background: #228be6; color: #fff; }
+.toggle-btn:hover:not(.active) { background: #f1f3f5; }
+
 /* Responsive */
 
 @media (max-width: 768px) {

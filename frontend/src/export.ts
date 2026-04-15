@@ -4,6 +4,8 @@ import {
   getMorningWindRoseChart,
   getAfternoonWindRoseChart,
   getBiasChart,
+  getAnalogOverlayChart,
+  getSpeedIncreaseChart,
 } from "./charts";
 
 function triggerDownload(url: string, filename: string): void {
@@ -69,4 +71,18 @@ export function downloadBiasChart(targetDate: string): void {
   if (!chart) return;
   const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
   triggerDownload(url, `bias_chart_${targetDate}.png`);
+}
+
+export function downloadAnalogOverlayChart(targetDate: string): void {
+  const chart = getAnalogOverlayChart();
+  if (!chart) return;
+  const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
+  triggerDownload(url, `analog_overlay_${targetDate}.png`);
+}
+
+export function downloadSpeedIncreaseChart(targetDate: string): void {
+  const chart = getSpeedIncreaseChart();
+  if (!chart) return;
+  const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
+  triggerDownload(url, `speed_increase_${targetDate}.png`);
 }

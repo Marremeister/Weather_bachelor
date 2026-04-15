@@ -158,6 +158,19 @@ export interface SeaBreezePanelData {
   analog_total: number;
 }
 
+export interface DayHourlyRecords {
+  date: string;
+  rank: number | null;
+  similarity_score: number | null;
+  records: WeatherRecord[];
+}
+
+export interface AnalogHourlyResponse {
+  run_id: number;
+  target: DayHourlyRecords;
+  analogs: DayHourlyRecords[];
+}
+
 export interface BiasCorrection {
   forecast_source: string;
   historical_source: string;

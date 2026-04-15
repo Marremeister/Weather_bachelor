@@ -5,9 +5,11 @@ import io
 import datetime as _dt
 from datetime import time
 
+from collections import defaultdict
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -16,11 +18,14 @@ from app.models.analog_result import AnalogResult
 from app.models.location import Location
 from app.models.weather_record import WeatherRecord
 from app.schemas.analog import (
+    AnalogHourlyResponse,
     AnalogResultResponse,
     AnalysisRequest,
     AnalysisRunDetailResponse,
     AnalysisRunResponse,
+    DayHourlyRecords,
 )
+from app.schemas.weather import WeatherRecordResponse
 from app.schemas.features import (
     DayClassificationDetail,
     SeaBreezePanelResponse,
@@ -364,6 +369,99 @@ def get_sea_breeze_panel(
         analog_medium_count=medium,
         analog_low_count=low,
         analog_total=len(analog_details),
+    )
+
+
+@router.get("/{run_id}/analog-hourly", response_model=AnalogHourlyResponse)
+def get_analog_hourly(
+    run_id: int,
+    top_n: int = Query(default=3, ge=1, le=10),
+    db: Session = Depends(get_db),
+):
+    run = db.get(AnalysisRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+
+    analogs = (
+        db.execute(
+            select(AnalogResult)
+            .where(AnalogResult.analysis_run_id == run.id)
+            .order_by(AnalogResult.rank)
+            .limit(top_n)
+        )
+        .scalars()
+        .all()
+    )
+
+    target_source = run.forecast_source or run.historical_source
+    analog_source = run.historical_source
+
+    # Collect all dates we need
+    all_dates = [run.target_date] + [a.analog_date for a in analogs]
+
+    # Build per-date filter conditions
+    date_conditions = []
+    for day in all_dates:
+        start_dt = _dt.datetime.combine(day, time.min)
+        end_dt = _dt.datetime.combine(day, time.max)
+        source = target_source if day == run.target_date else analog_source
+        cond = and_(
+            WeatherRecord.location_id == run.location_id,
+            WeatherRecord.valid_time_local >= start_dt,
+            WeatherRecord.valid_time_local <= end_dt,
+        )
+        if source:
+            cond = and_(cond, WeatherRecord.source == source)
+        date_conditions.append(cond)
+
+    if not date_conditions:
+        return AnalogHourlyResponse(
+            run_id=run.id,
+            target=DayHourlyRecords(date=run.target_date),
+            analogs=[],
+        )
+
+    records = (
+        db.execute(
+            select(WeatherRecord)
+            .where(or_(*date_conditions))
+            .order_by(WeatherRecord.valid_time_local)
+        )
+        .scalars()
+        .all()
+    )
+
+    # Group records by date
+    by_date: dict[_dt.date, list[WeatherRecord]] = defaultdict(list)
+    for rec in records:
+        day = rec.valid_time_local.date()
+        by_date[day].append(rec)
+
+    def _to_responses(recs: list[WeatherRecord]) -> list[WeatherRecordResponse]:
+        return [WeatherRecordResponse.model_validate(r) for r in recs]
+
+    target = DayHourlyRecords(
+        date=run.target_date,
+        rank=None,
+        similarity_score=None,
+        records=_to_responses(by_date.get(run.target_date, [])),
+    )
+
+    analog_items: list[DayHourlyRecords] = []
+    for analog in analogs:
+        analog_items.append(
+            DayHourlyRecords(
+                date=analog.analog_date,
+                rank=analog.rank,
+                similarity_score=analog.similarity_score,
+                records=_to_responses(by_date.get(analog.analog_date, [])),
+            )
+        )
+
+    return AnalogHourlyResponse(
+        run_id=run.id,
+        target=target,
+        analogs=analog_items,
     )
 
 

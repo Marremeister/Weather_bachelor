@@ -1,8 +1,12 @@
 """Schemas for analog matching analysis."""
 
+from __future__ import annotations
+
 from datetime import date, datetime
 
 from pydantic import BaseModel, Field
+
+from app.schemas.weather import WeatherRecordResponse
 
 
 class AnalysisRequest(BaseModel):
@@ -60,3 +64,16 @@ class AnalysisRunResponse(BaseModel):
 
 class AnalysisRunDetailResponse(AnalysisRunResponse):
     analogs: list[AnalogResultResponse] = []
+
+
+class DayHourlyRecords(BaseModel):
+    date: date
+    rank: int | None = None
+    similarity_score: float | None = None
+    records: list[WeatherRecordResponse] = []
+
+
+class AnalogHourlyResponse(BaseModel):
+    run_id: int
+    target: DayHourlyRecords
+    analogs: list[DayHourlyRecords]
