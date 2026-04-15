@@ -346,6 +346,23 @@ class TestRankAnalogs:
         assert abs(candidates[0].distance) < 1e-6
         assert abs(candidates[1].distance) < 1e-6
 
+    def test_missing_zero_weight_fields_do_not_crash(self):
+        """Candidates with None in zero-weight groups must not crash vectorization."""
+        target = _features()
+        # Historical day missing all afternoon and derived fields
+        missing_afternoon = _features(
+            date=date(2024, 6, 1),
+            afternoon_max_wind_speed=None,
+            afternoon_mean_wind_direction=None,
+            wind_speed_increase=None,
+            wind_direction_shift=None,
+            onshore_fraction=None,
+        )
+        # Default weights: afternoon=0, derived=0 → should be accepted and ranked
+        candidates = rank_analogs(target, [missing_afternoon], top_n=10)
+        assert len(candidates) == 1
+        assert candidates[0].date == date(2024, 6, 1)
+
 
 # ---------------------------------------------------------------------------
 # yearly_chunks

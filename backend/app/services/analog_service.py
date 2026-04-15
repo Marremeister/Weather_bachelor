@@ -107,7 +107,12 @@ def features_to_vector(features: DailyFeatures) -> list[float]:
          onshore_fraction]
     """
 
-    def _sincos(deg: float) -> tuple[float, float]:
+    def _safe(val: float | None) -> float:
+        return 0.0 if val is None else val
+
+    def _sincos(deg: float | None) -> tuple[float, float]:
+        if deg is None:
+            return 0.0, 0.0
         rad = math.radians(deg)
         return math.sin(rad), math.cos(rad)
 
@@ -116,18 +121,18 @@ def features_to_vector(features: DailyFeatures) -> list[float]:
     afternoon_dir_sin, afternoon_dir_cos = _sincos(features.afternoon_mean_wind_direction)
 
     return [
-        features.morning_mean_wind_speed,
+        _safe(features.morning_mean_wind_speed),
         morning_dir_sin,
         morning_dir_cos,
-        features.reference_wind_speed,
+        _safe(features.reference_wind_speed),
         ref_dir_sin,
         ref_dir_cos,
-        features.afternoon_max_wind_speed,
+        _safe(features.afternoon_max_wind_speed),
         afternoon_dir_sin,
         afternoon_dir_cos,
-        features.wind_speed_increase,
-        features.wind_direction_shift,
-        features.onshore_fraction,
+        _safe(features.wind_speed_increase),
+        _safe(features.wind_direction_shift),
+        _safe(features.onshore_fraction),
     ]
 
 
