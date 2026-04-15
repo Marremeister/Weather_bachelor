@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import logging
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -27,6 +29,16 @@ def _f_to_c(f: float | None) -> float | None:
     return (f - 32.0) * 5.0 / 9.0
 
 
+def _parse_float(value: str | None) -> float | None:
+    """Parse a CSV field, treating 'M' (missing) and empty strings as None."""
+    if value is None or value.strip() == "" or value.strip() == "M":
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
+
 class IemAsosProvider(ObservationProvider):
     @property
     def source_name(self) -> str:
@@ -46,7 +58,7 @@ class IemAsosProvider(ObservationProvider):
             "station": station_code,
             "data": "all",
             "tz": "UTC",
-            "format": "json",
+            "format": "onlycomma",
             "latlon": "no",
             "report_type": "3",
             "year1": str(start_date.year),
@@ -64,14 +76,18 @@ class IemAsosProvider(ObservationProvider):
 
         resp = httpx.get(IEM_ASOS_URL, params=params, timeout=30.0)
         resp.raise_for_status()
-        data = resp.json()
+        text = resp.text
 
         tz = ZoneInfo(timezone)
         utc = ZoneInfo("UTC")
         records: list[HourlyObservation] = []
+        raw_rows: list[dict[str, str]] = []
 
-        for row in data.get("results", []):
-            raw_time = row.get("valid")
+        reader = csv.DictReader(io.StringIO(text))
+        for row in reader:
+            raw_rows.append(dict(row))
+
+            raw_time = row.get("valid", "").strip()
             if not raw_time:
                 continue
 
@@ -79,17 +95,17 @@ class IemAsosProvider(ObservationProvider):
             obs_local = obs_utc.astimezone(tz).replace(tzinfo=None)
 
             # Convert units at provider boundary
-            sknt = row.get("sknt")
-            drct = row.get("drct")
-            gust = row.get("gust")
-            tmpf = row.get("tmpf")
-            alti = row.get("alti")
+            sknt = _parse_float(row.get("sknt"))
+            drct = _parse_float(row.get("drct"))
+            gust = _parse_float(row.get("gust"))
+            tmpf = _parse_float(row.get("tmpf"))
+            alti = _parse_float(row.get("alti"))
 
-            wind_speed = float(sknt) * KNOTS_TO_MS if sknt is not None and sknt != "M" else None
-            wind_dir = float(drct) if drct is not None and drct != "M" else None
-            gust_speed = float(gust) * KNOTS_TO_MS if gust is not None and gust != "M" else None
-            temperature = _f_to_c(float(tmpf)) if tmpf is not None and tmpf != "M" else None
-            pressure = float(alti) * INHG_TO_HPA if alti is not None and alti != "M" else None
+            wind_speed = sknt * KNOTS_TO_MS if sknt is not None else None
+            wind_dir = drct
+            gust_speed = gust * KNOTS_TO_MS if gust is not None else None
+            temperature = _f_to_c(tmpf)
+            pressure = alti * INHG_TO_HPA if alti is not None else None
 
             records.append(
                 HourlyObservation(
@@ -104,4 +120,7 @@ class IemAsosProvider(ObservationProvider):
             )
 
         logger.info("IEM ASOS: fetched %d records for %s", len(records), station_code)
-        return ObservationFetchResult(records=records, raw_payload=data)
+        return ObservationFetchResult(
+            records=records,
+            raw_payload={"rows": raw_rows},
+        )
