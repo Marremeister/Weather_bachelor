@@ -63,290 +63,307 @@
         </div>
       </section>
 
-      <!-- Summary Panel -->
-      <section class="card" id="summary-section" hidden>
-        <div class="section-header">
-          <h2>Analysis Summary</h2>
-          <button id="export-json-btn" class="btn-export">Export JSON</button>
+      <!-- Tab Bar -->
+      <nav class="tab-bar" id="results-tabs" role="tablist" aria-label="Analysis Results" hidden>
+        <button role="tab" id="tab-results" class="active" aria-controls="panel-results" aria-selected="true" tabindex="0">Results</button>
+        <button role="tab" id="tab-analysis" aria-controls="panel-analysis" aria-selected="false" tabindex="-1">Analysis</button>
+        <button role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false" tabindex="-1">Data</button>
+        <button role="tab" id="tab-validation" aria-controls="panel-validation" aria-selected="false" tabindex="-1">Validation</button>
+        <div class="tab-bar-actions">
+          <button id="export-menu-btn" class="btn-export">Export &#x25BE;</button>
+          <div id="export-menu" class="export-dropdown" role="menu" hidden></div>
         </div>
-        <div id="summary-panel"></div>
-      </section>
+      </nav>
 
-      <!-- Sea Breeze Classification & Probability -->
-      <section id="sea-breeze-section" class="charts-row" hidden>
-        <div class="card chart-card">
-          <div class="section-header"><h3>Sea Breeze Indicators</h3></div>
-          <div id="sb-gauges-panel"></div>
-        </div>
-        <div class="card chart-card">
-          <div class="section-header"><h3>Analog Sea Breeze Probability</h3></div>
-          <div id="sb-probability-panel"></div>
-        </div>
-      </section>
-
-      <!-- Forecast Composite -->
-      <section id="forecast-composite-section" class="card" hidden>
-        <div class="section-header">
-          <h2>Forecast Composite</h2>
-          <div class="export-toolbar">
-            <label class="trace-toggle">
-              <input type="checkbox" id="forecast-traces-toggle" /> Show analog traces
-            </label>
-            <button id="export-forecast-png-btn" class="btn-export">Save PNG</button>
-            <button id="export-forecast-csv-btn" class="btn-export">Export CSV</button>
-          </div>
-        </div>
-        <div id="forecast-gate-badge"></div>
-        <div id="forecast-chart" class="chart-container"></div>
-        <div class="table-scroll">
-          <table id="forecast-table" class="data-table"></table>
-        </div>
-        <div id="validation-section" hidden>
-          <div class="section-header" style="margin-top:1.25rem;">
-            <h3>Observation Validation</h3>
-            <select id="station-select" style="font-size:0.85rem;padding:0.25rem 0.5rem;">
-              <option value="">Select station...</option>
-            </select>
-          </div>
-          <div id="validation-metrics" class="summary-grid"></div>
-        </div>
-      </section>
-
-      <!-- Analog Overlay Charts -->
-      <section id="analog-overlay-section" class="charts-row" hidden>
-        <div class="card chart-card">
+      <!-- Tab Panel: Results -->
+      <div id="panel-results" class="tab-panel" role="tabpanel" aria-labelledby="tab-results" tabindex="0">
+        <!-- Summary Panel -->
+        <section class="card" id="summary-section" hidden>
           <div class="section-header">
-            <h3>Target vs Analog Wind Curves</h3>
+            <h2>Analysis Summary</h2>
+          </div>
+          <div id="summary-panel"></div>
+        </section>
+
+        <!-- Sea Breeze Classification & Probability -->
+        <section id="sea-breeze-section" class="charts-row" hidden>
+          <div class="card chart-card">
+            <div class="section-header"><h3>Sea Breeze Indicators</h3></div>
+            <div id="sb-gauges-panel"></div>
+          </div>
+          <div class="card chart-card">
+            <div class="section-header"><h3>Analog Sea Breeze Probability</h3></div>
+            <div id="sb-probability-panel"></div>
+          </div>
+        </section>
+
+        <!-- Forecast Composite -->
+        <section id="forecast-composite-section" class="card" hidden>
+          <div class="section-header">
+            <h2>Forecast Composite</h2>
             <div class="export-toolbar">
-              <div class="toggle-group" id="analog-metric-toggle">
-                <button class="toggle-btn active" data-metric="tws">TWS</button>
-                <button class="toggle-btn" data-metric="twd">TWD</button>
-              </div>
-              <button id="export-analog-overlay-png-btn" class="btn-export">Save PNG</button>
+              <label class="trace-toggle">
+                <input type="checkbox" id="forecast-traces-toggle" /> Show analog traces
+              </label>
+              <button id="export-forecast-png-btn" class="btn-export">Save PNG</button>
             </div>
           </div>
-          <div id="analog-overlay-chart" class="chart-container"></div>
-        </div>
-        <div class="card chart-card">
-          <div class="section-header">
-            <h3>Wind Speed Increase Comparison</h3>
-            <button id="export-speed-increase-png-btn" class="btn-export">Save PNG</button>
+          <div id="forecast-gate-badge"></div>
+          <div id="forecast-chart" class="chart-container"></div>
+          <div class="table-scroll">
+            <table id="forecast-table" class="data-table"></table>
           </div>
-          <div id="speed-increase-chart" class="chart-container"></div>
-        </div>
-      </section>
-
-      <!-- Feature Radar & Direction Shift -->
-      <section id="feature-radar-section" class="charts-row" hidden>
-        <div class="card chart-card">
-          <div class="section-header">
-            <h3>Feature Radar — Target vs Analog Mean</h3>
-            <button id="export-feature-radar-png-btn" class="btn-export">Save PNG</button>
-          </div>
-          <div id="feature-radar-chart" class="chart-container"></div>
-        </div>
-        <div class="card chart-card">
-          <div class="section-header">
-            <h3>Direction Shift Comparison</h3>
-            <button id="export-direction-shift-png-btn" class="btn-export">Save PNG</button>
-          </div>
-          <div id="direction-shift-chart" class="chart-container"></div>
-        </div>
-      </section>
-
-      <!-- Seasonal Heatmap -->
-      <section class="card" id="seasonal-heatmap-section" hidden>
-        <div class="section-header">
-          <h3>Seasonal Calendar Heatmap</h3>
-          <div class="export-toolbar">
-            <div class="toggle-group" id="heatmap-color-toggle">
-              <button class="toggle-btn active" data-mode="speed">Speed Increase</button>
-              <button class="toggle-btn" data-mode="classification">Classification</button>
-            </div>
-            <button id="export-seasonal-heatmap-png-btn" class="btn-export">Save PNG</button>
-          </div>
-        </div>
-        <div id="seasonal-heatmap-chart" class="chart-container"></div>
-      </section>
-
-      <!-- Distance Distribution -->
-      <section class="card" id="distance-distribution-section" hidden>
-        <div class="section-header">
-          <h3>Analog Distance Distribution</h3>
-          <button id="export-distance-histogram-png-btn" class="btn-export">Save PNG</button>
-        </div>
-        <div id="distance-histogram-chart" class="chart-container"></div>
-      </section>
-
-      <!-- Charts Row -->
-      <section id="charts-section" class="charts-row" hidden>
-        <div class="card chart-card">
-          <div class="section-header">
-            <h3>Wind Speed &amp; Direction</h3>
-            <div class="export-toolbar">
-              <select id="wind-station-select" style="font-size:0.85rem;padding:0.25rem 0.5rem;">
-                <option value="">Overlay station...</option>
+          <div id="validation-section" hidden>
+            <div class="section-header" style="margin-top:1.25rem;">
+              <h3>Observation Validation</h3>
+              <select id="station-select" style="font-size:0.85rem;padding:0.25rem 0.5rem;">
+                <option value="">Select station...</option>
               </select>
-              <button id="export-wind-png-btn" class="btn-export">Save PNG</button>
+            </div>
+            <div id="validation-metrics" class="summary-grid"></div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Tab Panel: Analysis -->
+      <div id="panel-analysis" class="tab-panel" role="tabpanel" aria-labelledby="tab-analysis" tabindex="0" hidden>
+        <!-- Analog Overlay Charts -->
+        <section id="analog-overlay-section" class="charts-row" hidden>
+          <div class="card chart-card">
+            <div class="section-header">
+              <h3>Target vs Analog Wind Curves</h3>
+              <div class="export-toolbar">
+                <div class="toggle-group" id="analog-metric-toggle">
+                  <button class="toggle-btn active" data-metric="tws">TWS</button>
+                  <button class="toggle-btn" data-metric="twd">TWD</button>
+                </div>
+                <button id="export-analog-overlay-png-btn" class="btn-export">Save PNG</button>
+              </div>
+            </div>
+            <div id="analog-overlay-chart" class="chart-container"></div>
+          </div>
+          <div class="card chart-card">
+            <div class="section-header">
+              <h3>Wind Speed Increase Comparison</h3>
+              <button id="export-speed-increase-png-btn" class="btn-export">Save PNG</button>
+            </div>
+            <div id="speed-increase-chart" class="chart-container"></div>
+          </div>
+        </section>
+
+        <!-- Feature Radar & Direction Shift -->
+        <section id="feature-radar-section" class="charts-row" hidden>
+          <div class="card chart-card">
+            <div class="section-header">
+              <h3>Feature Radar — Target vs Analog Mean</h3>
+              <button id="export-feature-radar-png-btn" class="btn-export">Save PNG</button>
+            </div>
+            <div id="feature-radar-chart" class="chart-container"></div>
+          </div>
+          <div class="card chart-card">
+            <div class="section-header">
+              <h3>Direction Shift Comparison</h3>
+              <button id="export-direction-shift-png-btn" class="btn-export">Save PNG</button>
+            </div>
+            <div id="direction-shift-chart" class="chart-container"></div>
+          </div>
+        </section>
+
+        <!-- Seasonal Heatmap -->
+        <section class="card" id="seasonal-heatmap-section" hidden>
+          <div class="section-header">
+            <h3>Seasonal Calendar Heatmap</h3>
+            <div class="export-toolbar">
+              <div class="toggle-group" id="heatmap-color-toggle">
+                <button class="toggle-btn active" data-mode="speed">Speed Increase</button>
+                <button class="toggle-btn" data-mode="classification">Classification</button>
+              </div>
+              <button id="export-seasonal-heatmap-png-btn" class="btn-export">Save PNG</button>
             </div>
           </div>
-          <div id="wind-overlay-chart" class="chart-container"></div>
-        </div>
-        <div class="card chart-card">
+          <div id="seasonal-heatmap-chart" class="chart-container"></div>
+        </section>
+
+        <!-- Distance Distribution -->
+        <section class="card" id="distance-distribution-section" hidden>
           <div class="section-header">
-            <h3>Temperature &amp; Pressure</h3>
-            <button id="export-temp-press-png-btn" class="btn-export">Save PNG</button>
+            <h3>Analog Distance Distribution</h3>
+            <button id="export-distance-histogram-png-btn" class="btn-export">Save PNG</button>
           </div>
-          <div id="temp-pressure-chart" class="chart-container"></div>
-        </div>
-      </section>
+          <div id="distance-histogram-chart" class="chart-container"></div>
+        </section>
+      </div>
 
-      <!-- Wind Rose Charts -->
-      <section id="windrose-section" class="charts-row" hidden>
-        <div class="card chart-card">
+      <!-- Tab Panel: Data -->
+      <div id="panel-data" class="tab-panel" role="tabpanel" aria-labelledby="tab-data" tabindex="0" hidden>
+        <!-- Charts Row -->
+        <section id="charts-section" class="charts-row" hidden>
+          <div class="card chart-card">
+            <div class="section-header">
+              <h3>Wind Speed &amp; Direction</h3>
+              <div class="export-toolbar">
+                <select id="wind-station-select" style="font-size:0.85rem;padding:0.25rem 0.5rem;">
+                  <option value="">Overlay station...</option>
+                </select>
+                <button id="export-wind-png-btn" class="btn-export">Save PNG</button>
+              </div>
+            </div>
+            <div id="wind-overlay-chart" class="chart-container"></div>
+          </div>
+          <div class="card chart-card">
+            <div class="section-header">
+              <h3>Temperature &amp; Pressure</h3>
+              <button id="export-temp-press-png-btn" class="btn-export">Save PNG</button>
+            </div>
+            <div id="temp-pressure-chart" class="chart-container"></div>
+          </div>
+        </section>
+
+        <!-- Wind Rose Charts -->
+        <section id="windrose-section" class="charts-row" hidden>
+          <div class="card chart-card">
+            <div class="section-header">
+              <h3>Morning Wind Rose</h3>
+              <button id="export-morning-wr-png-btn" class="btn-export">Save PNG</button>
+            </div>
+            <div id="morning-windrose-chart" class="chart-container chart-container-sm"></div>
+          </div>
+          <div class="card chart-card">
+            <div class="section-header">
+              <h3>Afternoon Wind Rose</h3>
+              <button id="export-afternoon-wr-png-btn" class="btn-export">Save PNG</button>
+            </div>
+            <div id="afternoon-windrose-chart" class="chart-container chart-container-sm"></div>
+          </div>
+        </section>
+
+        <!-- Hourly Data Table -->
+        <section class="card" id="hourly-section" hidden>
           <div class="section-header">
-            <h3>Morning Wind Rose</h3>
-            <button id="export-morning-wr-png-btn" class="btn-export">Save PNG</button>
-          </div>
-          <div id="morning-windrose-chart" class="chart-container chart-container-sm"></div>
-        </div>
-        <div class="card chart-card">
-          <div class="section-header">
-            <h3>Afternoon Wind Rose</h3>
-            <button id="export-afternoon-wr-png-btn" class="btn-export">Save PNG</button>
-          </div>
-          <div id="afternoon-windrose-chart" class="chart-container chart-container-sm"></div>
-        </div>
-      </section>
-
-      <!-- Hourly Data Table -->
-      <section class="card" id="hourly-section" hidden>
-        <div class="section-header">
-          <h2>Hourly Weather Data</h2>
-          <button id="export-weather-csv-btn" class="btn-export">Export CSV</button>
-        </div>
-        <div class="table-scroll">
-          <table id="hourly-table" class="data-table"></table>
-        </div>
-      </section>
-
-      <!-- Analog Days Table -->
-      <section class="card" id="analog-section" hidden>
-        <div class="section-header">
-          <h2>Analog Days Ranking</h2>
-          <button id="export-analogs-csv-btn" class="btn-export">Export CSV</button>
-        </div>
-        <div class="table-scroll">
-          <table id="analog-table" class="data-table"></table>
-        </div>
-      </section>
-
-      <!-- Data Quality & Source Bias -->
-      <section class="card" id="bias-quality-section" hidden>
-        <div class="section-header">
-          <h2>Data Quality &amp; Source Bias</h2>
-        </div>
-        <div id="quality-indicators" class="summary-grid" style="margin-bottom:1.25rem;"></div>
-        <div id="bias-chart-wrapper" hidden>
-          <div class="section-header">
-            <h3>Bias Correction Statistics</h3>
-            <button id="export-bias-png-btn" class="btn-export">Save PNG</button>
-          </div>
-          <div id="bias-chart" class="chart-container"></div>
-          <div class="table-scroll" style="margin-top:0.75rem;">
-            <table id="bias-table" class="data-table"></table>
-          </div>
-        </div>
-        <div id="bias-no-data" hidden>
-          <p style="color:#868e96;font-size:0.9rem;">
-            No bias calibration data available for this location.
-            Run bias calibration to see source bias statistics.
-          </p>
-        </div>
-      </section>
-
-      <!-- Batch Validation -->
-      <section class="card" id="batch-validation-section">
-        <div class="section-header">
-          <h2>Batch Validation</h2>
-        </div>
-        <div class="batch-validation-form" style="display:flex;gap:1rem;align-items:end;flex-wrap:wrap;margin-bottom:1rem;">
-          <div class="form-group" style="min-width:160px;">
-            <label for="val-method">Method</label>
-            <select id="val-method" style="font-size:0.85rem;padding:0.3rem 0.5rem;">
-              <option value="temporal_split">Temporal Split</option>
-              <option value="leave_one_out">Leave-One-Out</option>
-            </select>
-          </div>
-          <div class="form-group form-group-sm">
-            <label for="val-buffer">Buffer (days)</label>
-            <input type="number" id="val-buffer" value="7" min="0" max="30" style="width:70px;" />
-          </div>
-          <div class="form-group form-group-sm">
-            <label for="val-topn">Top N</label>
-            <input type="number" id="val-topn" value="10" min="1" max="50" style="width:70px;" />
-          </div>
-          <button id="run-validation-btn" class="btn-primary" style="height:fit-content;">Run Validation</button>
-        </div>
-        <div id="val-progress" hidden>
-          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
-            <span id="val-progress-label" style="font-size:0.9rem;color:#495057;">Running...</span>
-            <span id="val-progress-count" style="font-size:0.85rem;color:#868e96;">0/0</span>
-          </div>
-          <div style="background:#e9ecef;border-radius:4px;height:8px;overflow:hidden;">
-            <div id="val-progress-bar" style="background:#228be6;height:100%;width:0%;transition:width 0.3s;"></div>
-          </div>
-        </div>
-        <div id="val-error" class="error-msg" hidden></div>
-        <div id="val-results" hidden>
-          <div class="section-header" style="margin-top:1.25rem;">
-            <h3>Classification Metrics</h3>
-          </div>
-          <div id="val-classification-grid" class="summary-grid"></div>
-          <div class="section-header" style="margin-top:1.25rem;">
-            <h3>Continuous Metrics (Sea Breeze Days)</h3>
-          </div>
-          <div id="val-continuous-grid" class="summary-grid"></div>
-          <div class="section-header" style="margin-top:1.25rem;">
-            <h3>Gate Sensitivity</h3>
+            <h2>Hourly Weather Data</h2>
           </div>
           <div class="table-scroll">
-            <table id="val-gate-table" class="data-table"></table>
+            <table id="hourly-table" class="data-table"></table>
           </div>
-          <div class="section-header" style="margin-top:1.25rem;">
-            <h3>Source Stratification</h3>
+        </section>
+
+        <!-- Analog Days Table -->
+        <section class="card" id="analog-section" hidden>
+          <div class="section-header">
+            <h2>Analog Days Ranking</h2>
           </div>
           <div class="table-scroll">
-            <table id="val-source-table" class="data-table"></table>
+            <table id="analog-table" class="data-table"></table>
           </div>
-          <section class="charts-row" style="margin-top:1.25rem;">
-            <div class="card chart-card">
-              <div class="section-header"><h3>Daily Forecast Error</h3></div>
-              <div id="val-timeseries-chart" class="chart-container"></div>
-            </div>
-            <div class="card chart-card">
-              <div class="section-header"><h3>Error Distribution</h3></div>
-              <div id="val-histogram-chart" class="chart-container"></div>
-            </div>
-          </section>
-          <div class="card" style="margin-top:1.25rem;">
-            <div class="section-header"><h3>Monthly Accuracy</h3></div>
-            <div id="val-monthly-chart" class="chart-container"></div>
-          </div>
-          <div style="margin-top:1rem;">
-            <button id="val-export-csv-btn" class="btn-export">Export Per-Day CSV</button>
-          </div>
-        </div>
-        <div id="val-history" style="margin-top:1.25rem;">
+        </section>
+
+        <!-- Data Quality & Source Bias -->
+        <section class="card" id="bias-quality-section" hidden>
           <div class="section-header">
-            <h3>Previous Validation Runs</h3>
-            <button id="refresh-val-history-btn" class="btn-export">Refresh</button>
+            <h2>Data Quality &amp; Source Bias</h2>
           </div>
-          <div id="val-history-list" class="history-list">
-            <p class="history-empty">No validation runs found.</p>
+          <div id="quality-indicators" class="summary-grid" style="margin-bottom:1.25rem;"></div>
+          <div id="bias-chart-wrapper" hidden>
+            <div class="section-header">
+              <h3>Bias Correction Statistics</h3>
+              <button id="export-bias-png-btn" class="btn-export">Save PNG</button>
+            </div>
+            <div id="bias-chart" class="chart-container"></div>
+            <div class="table-scroll" style="margin-top:0.75rem;">
+              <table id="bias-table" class="data-table"></table>
+            </div>
           </div>
-        </div>
-      </section>
+          <div id="bias-no-data" hidden>
+            <p style="color:#868e96;font-size:0.9rem;">
+              No bias calibration data available for this location.
+              Run bias calibration to see source bias statistics.
+            </p>
+          </div>
+        </section>
+      </div>
+
+      <!-- Tab Panel: Validation -->
+      <div id="panel-validation" class="tab-panel" role="tabpanel" aria-labelledby="tab-validation" tabindex="0" hidden>
+        <!-- Batch Validation -->
+        <section class="card" id="batch-validation-section">
+          <div class="section-header">
+            <h2>Batch Validation</h2>
+          </div>
+          <div class="batch-validation-form" style="display:flex;gap:1rem;align-items:end;flex-wrap:wrap;margin-bottom:1rem;">
+            <div class="form-group" style="min-width:160px;">
+              <label for="val-method">Method</label>
+              <select id="val-method" style="font-size:0.85rem;padding:0.3rem 0.5rem;">
+                <option value="temporal_split">Temporal Split</option>
+                <option value="leave_one_out">Leave-One-Out</option>
+              </select>
+            </div>
+            <div class="form-group form-group-sm">
+              <label for="val-buffer">Buffer (days)</label>
+              <input type="number" id="val-buffer" value="7" min="0" max="30" style="width:70px;" />
+            </div>
+            <div class="form-group form-group-sm">
+              <label for="val-topn">Top N</label>
+              <input type="number" id="val-topn" value="10" min="1" max="50" style="width:70px;" />
+            </div>
+            <button id="run-validation-btn" class="btn-primary" style="height:fit-content;">Run Validation</button>
+          </div>
+          <div id="val-progress" hidden>
+            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+              <span id="val-progress-label" style="font-size:0.9rem;color:#495057;">Running...</span>
+              <span id="val-progress-count" style="font-size:0.85rem;color:#868e96;">0/0</span>
+            </div>
+            <div style="background:#e9ecef;border-radius:4px;height:8px;overflow:hidden;">
+              <div id="val-progress-bar" style="background:#228be6;height:100%;width:0%;transition:width 0.3s;"></div>
+            </div>
+          </div>
+          <div id="val-error" class="error-msg" hidden></div>
+          <div id="val-results" hidden>
+            <div class="section-header" style="margin-top:1.25rem;">
+              <h3>Classification Metrics</h3>
+            </div>
+            <div id="val-classification-grid" class="summary-grid"></div>
+            <div class="section-header" style="margin-top:1.25rem;">
+              <h3>Continuous Metrics (Sea Breeze Days)</h3>
+            </div>
+            <div id="val-continuous-grid" class="summary-grid"></div>
+            <div class="section-header" style="margin-top:1.25rem;">
+              <h3>Gate Sensitivity</h3>
+            </div>
+            <div class="table-scroll">
+              <table id="val-gate-table" class="data-table"></table>
+            </div>
+            <div class="section-header" style="margin-top:1.25rem;">
+              <h3>Source Stratification</h3>
+            </div>
+            <div class="table-scroll">
+              <table id="val-source-table" class="data-table"></table>
+            </div>
+            <section class="charts-row" style="margin-top:1.25rem;">
+              <div class="card chart-card">
+                <div class="section-header"><h3>Daily Forecast Error</h3></div>
+                <div id="val-timeseries-chart" class="chart-container"></div>
+              </div>
+              <div class="card chart-card">
+                <div class="section-header"><h3>Error Distribution</h3></div>
+                <div id="val-histogram-chart" class="chart-container"></div>
+              </div>
+            </section>
+            <div class="card" style="margin-top:1.25rem;">
+              <div class="section-header"><h3>Monthly Accuracy</h3></div>
+              <div id="val-monthly-chart" class="chart-container"></div>
+            </div>
+          </div>
+          <div id="val-history" style="margin-top:1.25rem;">
+            <div class="section-header">
+              <h3>Previous Validation Runs</h3>
+              <button id="refresh-val-history-btn" class="btn-export">Refresh</button>
+            </div>
+            <div id="val-history-list" class="history-list">
+              <p class="history-empty">No validation runs found.</p>
+            </div>
+          </div>
+        </section>
+      </div>
 
       <!-- Legacy sections -->
       <details class="legacy-section">

@@ -22,7 +22,9 @@ import {
   runAnalysis,
   triggerBatchValidation,
 } from "./api";
-import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart, disposeForecastChart, renderValidationTimeSeriesChart, renderValidationHistogramChart, renderValidationMonthlyChart, disposeValidationCharts } from "./charts";
+import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart, disposeForecastChart, renderValidationTimeSeriesChart, renderValidationHistogramChart, renderValidationMonthlyChart, disposeValidationCharts, resizeChartById } from "./charts";
+import { TabController } from "./tabs";
+import { ExportMenu } from "./export-menu";
 import {
   renderSummaryPanel,
   renderHourlyTable,
@@ -118,7 +120,6 @@ const forecastChartEl = document.getElementById("forecast-chart")!;
 const forecastTableEl = document.getElementById("forecast-table")!;
 const forecastTracesToggle = document.getElementById("forecast-traces-toggle") as HTMLInputElement;
 const exportForecastPngBtn = document.getElementById("export-forecast-png-btn") as HTMLButtonElement;
-const exportForecastCsvBtn = document.getElementById("export-forecast-csv-btn") as HTMLButtonElement;
 
 // Validation / Observations
 const validationSection = document.getElementById("validation-section")!;
@@ -139,12 +140,9 @@ const biasTableEl = document.getElementById("bias-table")!;
 const biasNoData = document.getElementById("bias-no-data")!;
 const exportBiasPngBtn = document.getElementById("export-bias-png-btn") as HTMLButtonElement;
 
-// Export buttons
-const exportJsonBtn = document.getElementById("export-json-btn") as HTMLButtonElement;
+// Export buttons (PNG only — CSV/JSON moved to export dropdown)
 const exportWindPngBtn = document.getElementById("export-wind-png-btn") as HTMLButtonElement;
 const exportTempPressPngBtn = document.getElementById("export-temp-press-png-btn") as HTMLButtonElement;
-const exportWeatherCsvBtn = document.getElementById("export-weather-csv-btn") as HTMLButtonElement;
-const exportAnalogsCsvBtn = document.getElementById("export-analogs-csv-btn") as HTMLButtonElement;
 const exportMorningWrPngBtn = document.getElementById("export-morning-wr-png-btn") as HTMLButtonElement;
 const exportAfternoonWrPngBtn = document.getElementById("export-afternoon-wr-png-btn") as HTMLButtonElement;
 
@@ -175,6 +173,57 @@ let currentHeatmapColorMode: "speed" | "classification" = "speed";
 let currentForecastData: ForecastCompositeData | null = null;
 let currentForecastTraces: AnalogHourlyResponse | null = null;
 let forecastTracesVisible = false;
+
+// --- Tab Controller ---
+
+const PANEL_CHART_IDS: Record<string, string[]> = {
+  results: ["forecast-chart"],
+  analysis: [
+    "analog-overlay-chart", "speed-increase-chart",
+    "feature-radar-chart", "direction-shift-chart",
+    "seasonal-heatmap-chart", "distance-histogram-chart",
+  ],
+  data: [
+    "wind-overlay-chart", "temp-pressure-chart",
+    "morning-windrose-chart", "afternoon-windrose-chart",
+    "bias-chart",
+  ],
+  validation: [
+    "val-timeseries-chart", "val-histogram-chart", "val-monthly-chart",
+  ],
+};
+
+function handleTabSwitch(tabId: string) {
+  const chartIds = PANEL_CHART_IDS[tabId];
+  if (chartIds) {
+    // Small delay to let the panel become visible before resizing
+    requestAnimationFrame(() => {
+      for (const id of chartIds) {
+        resizeChartById(id);
+      }
+    });
+  }
+}
+
+const tabController = new TabController("results-tabs", [
+  { id: "results", label: "Results", panelId: "panel-results" },
+  { id: "analysis", label: "Analysis", panelId: "panel-analysis" },
+  { id: "data", label: "Data", panelId: "panel-data" },
+  { id: "validation", label: "Validation", panelId: "panel-validation" },
+], { onSwitch: handleTabSwitch });
+
+// --- Export Dropdown ---
+
+const exportMenu = new ExportMenu("export-menu-btn", "export-menu", [
+  { id: "json", label: "Analysis JSON", group: "data", handler: () => { if (currentRunId != null) downloadAnalysisJson(currentRunId, currentTargetDate); } },
+  { id: "weather-csv", label: "Weather CSV", group: "data", handler: () => { if (currentRunId != null) downloadWeatherCsv(currentRunId, currentTargetDate); } },
+  { id: "analogs-csv", label: "Analogs CSV", group: "data", handler: () => { if (currentRunId != null) downloadAnalogsCsv(currentRunId, currentTargetDate); } },
+  { id: "forecast-csv", label: "Forecast CSV", group: "data", handler: () => { if (currentRunId != null) downloadForecastCsv(currentRunId, currentTargetDate); }, enabled: () => currentMode === "forecast" },
+  { id: "val-csv", label: "Validation CSV", group: "data", handler: () => { if (currentValRunId != null) window.open(`/api/validation/${currentValRunId}/export/csv`, "_blank"); }, enabled: () => currentValRunId != null },
+]);
+
+// Suppress unused-variable lint for exportMenu
+void exportMenu;
 
 // --- Init ---
 
@@ -424,6 +473,10 @@ historyList.addEventListener("click", async (e) => {
     currentRunId = runId;
     currentTargetDate = targetDate;
 
+    // Show tab bar and switch to Results tab
+    tabController.show();
+    tabController.switchTo("results");
+
     renderSummaryPanel(summaryPanel, analysisRun);
     summarySection.hidden = false;
 
@@ -514,6 +567,10 @@ analysisForm.addEventListener("submit", async (e) => {
     currentRunId = analysisRun.id;
     currentTargetDate = targetDateInput.value;
 
+    // Show tab bar and switch to Results tab
+    tabController.show();
+    tabController.switchTo("results");
+
     // Summary
     renderSummaryPanel(summaryPanel, analysisRun);
     summarySection.hidden = false;
@@ -580,24 +637,12 @@ function showError(msg: string) {
 
 // --- Export handlers ---
 
-exportJsonBtn.addEventListener("click", () => {
-  if (currentRunId != null) downloadAnalysisJson(currentRunId, currentTargetDate);
-});
-
 exportWindPngBtn.addEventListener("click", () => {
   downloadWindOverlayChart(currentTargetDate);
 });
 
 exportTempPressPngBtn.addEventListener("click", () => {
   downloadTempPressureChart(currentTargetDate);
-});
-
-exportWeatherCsvBtn.addEventListener("click", () => {
-  if (currentRunId != null) downloadWeatherCsv(currentRunId, currentTargetDate);
-});
-
-exportAnalogsCsvBtn.addEventListener("click", () => {
-  if (currentRunId != null) downloadAnalogsCsv(currentRunId, currentTargetDate);
 });
 
 exportMorningWrPngBtn.addEventListener("click", () => {
@@ -792,7 +837,6 @@ async function renderForecastPanel(
       renderForecastChart(forecastChartEl, data);
       renderForecastTable(forecastTableEl, data);
       exportForecastPngBtn.hidden = false;
-      exportForecastCsvBtn.hidden = false;
       forecastTracesToggle.parentElement!.hidden = false;
       // Only show validation for past dates where observations exist
       const targetInPast = new Date(currentTargetDate + "T23:59:59") < new Date();
@@ -806,7 +850,6 @@ async function renderForecastPanel(
       forecastChartEl.innerHTML = "";
       forecastTableEl.innerHTML = "";
       exportForecastPngBtn.hidden = true;
-      exportForecastCsvBtn.hidden = true;
       forecastTracesToggle.parentElement!.hidden = true;
       validationSection.hidden = true;
     }
@@ -838,13 +881,9 @@ forecastTracesToggle.addEventListener("change", async () => {
   renderForecastChart(forecastChartEl, currentForecastData, traces, forecastTracesVisible, obs);
 });
 
-// Forecast export buttons
+// Forecast export button (PNG)
 exportForecastPngBtn.addEventListener("click", () => {
   downloadForecastChart(currentTargetDate);
-});
-
-exportForecastCsvBtn.addEventListener("click", () => {
-  if (currentRunId != null) downloadForecastCsv(currentRunId, currentTargetDate);
 });
 
 // --- Legacy classification ---
@@ -913,7 +952,6 @@ const valClassificationGrid = document.getElementById("val-classification-grid")
 const valContinuousGrid = document.getElementById("val-continuous-grid")!;
 const valGateTable = document.getElementById("val-gate-table")!;
 const valSourceTable = document.getElementById("val-source-table")!;
-const valExportCsvBtn = document.getElementById("val-export-csv-btn") as HTMLButtonElement;
 const valTimeseriesChartEl = document.getElementById("val-timeseries-chart")!;
 const valHistogramChartEl = document.getElementById("val-histogram-chart")!;
 const valMonthlyChartEl = document.getElementById("val-monthly-chart")!;
@@ -1056,12 +1094,6 @@ runValidationBtn.addEventListener("click", async () => {
     valError.textContent = `Failed to start validation: ${err instanceof Error ? err.message : String(err)}`;
     valError.hidden = false;
     runValidationBtn.disabled = false;
-  }
-});
-
-valExportCsvBtn.addEventListener("click", () => {
-  if (currentValRunId != null) {
-    window.open(`/api/validation/${currentValRunId}/export/csv`, "_blank");
   }
 });
 

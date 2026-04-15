@@ -1969,6 +1969,30 @@ export function disposeValidationCharts(): void {
   if (valMonthlyChart) { valMonthlyChart.dispose(); valMonthlyChart = null; }
 }
 
+// Map container element IDs to their chart instance references
+const chartByContainerId: Record<string, () => ECharts | null> = {
+  "wind-overlay-chart": () => windOverlayChart,
+  "temp-pressure-chart": () => tempPressureChart,
+  "morning-windrose-chart": () => morningWindRoseChart,
+  "afternoon-windrose-chart": () => afternoonWindRoseChart,
+  "bias-chart": () => biasChart,
+  "analog-overlay-chart": () => analogOverlayChart,
+  "speed-increase-chart": () => speedIncreaseChart,
+  "feature-radar-chart": () => featureRadarChart,
+  "direction-shift-chart": () => directionShiftChart,
+  "seasonal-heatmap-chart": () => seasonalHeatmapChart,
+  "distance-histogram-chart": () => distanceHistogramChart,
+  "forecast-chart": () => forecastChart,
+  "val-timeseries-chart": () => valTimeseriesChart,
+  "val-histogram-chart": () => valHistogramChart,
+  "val-monthly-chart": () => valMonthlyChart,
+};
+
+export function resizeChartById(containerId: string): void {
+  const getter = chartByContainerId[containerId];
+  if (getter) getter()?.resize();
+}
+
 function handleResize() {
   windOverlayChart?.resize();
   tempPressureChart?.resize();
