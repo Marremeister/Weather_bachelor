@@ -2092,7 +2092,7 @@ export function renderValDetailForecastChart(
     });
 
     series.push({
-      name: "Actual ERA5 TWS",
+      name: "Actual TWS",
       type: "line",
       data: actualTwsData,
       smooth: true,
@@ -2103,7 +2103,7 @@ export function renderValDetailForecastChart(
       z: 6,
     });
     series.push({
-      name: "Actual ERA5 TWD",
+      name: "Actual TWD",
       type: "scatter",
       yAxisIndex: 1,
       data: actualTwdData,
@@ -2112,7 +2112,7 @@ export function renderValDetailForecastChart(
       itemStyle: { color: "#2b8a3e" },
       z: 6,
     });
-    legendData.push("Actual ERA5 TWS", "Actual ERA5 TWD");
+    legendData.push("Actual TWS", "Actual TWD");
   }
 
   valDetailChart.setOption({

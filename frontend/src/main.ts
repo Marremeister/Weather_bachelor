@@ -1109,13 +1109,13 @@ async function drillDownToValDay(date: string) {
     const analysisRun = await runAnalysis(request);
     const runId = analysisRun.id;
 
-    // Fetch forecast composite and ERA5 actual weather in parallel
+    // Fetch forecast composite and actual weather in parallel
     const [composite, actualRecords] = await Promise.all([
       getForecastComposite(runId),
-      getWeatherRecords(currentValResult.location_id, date, date, "era5"),
+      getWeatherRecords(currentValResult.location_id, date, date, histSource),
     ]);
 
-    // Render the forecast chart with ERA5 overlay
+    // Render the forecast chart with actual overlay
     valDetailChartEl.innerHTML = "";
     renderValDetailForecastChart(valDetailChartEl, composite, actualRecords);
 
