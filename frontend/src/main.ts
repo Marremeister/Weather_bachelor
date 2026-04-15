@@ -752,10 +752,11 @@ async function renderForecastPanel(
       exportForecastPngBtn.hidden = false;
       exportForecastCsvBtn.hidden = false;
       forecastTracesToggle.parentElement!.hidden = false;
-      validationSection.hidden = false;
+      // Only show validation for past dates where observations exist
+      const targetInPast = new Date(currentTargetDate + "T23:59:59") < new Date();
+      validationSection.hidden = !targetInPast;
 
-      // Auto-load observations if a station is selected
-      if (stationSelect.value) {
+      if (targetInPast && stationSelect.value) {
         loadObservationOverlay();
       }
     } else {
