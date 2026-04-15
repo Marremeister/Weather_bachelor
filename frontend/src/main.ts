@@ -967,12 +967,13 @@ function renderValResults(result: ValidationRunResult) {
   if (result.source_stratification) {
     renderSourceStratificationTable(valSourceTable, result.source_stratification);
   }
+  // Unhide before chart init so ECharts can measure container dimensions
+  valResults.hidden = false;
   if (result.per_day_results && result.per_day_results.length > 0) {
     renderValidationTimeSeriesChart(valTimeseriesChartEl, result.per_day_results);
     renderValidationHistogramChart(valHistogramChartEl, result.per_day_results);
     renderValidationMonthlyChart(valMonthlyChartEl, result.per_day_results);
   }
-  valResults.hidden = false;
 }
 
 async function loadValResults(runId: number) {
