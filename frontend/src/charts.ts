@@ -1291,17 +1291,23 @@ export function renderDistanceHistogramChart(
     },
   }));
 
-  // Mark lines for individual top-N analog distances
+  // Mark lines for individual top-N analog distances — resolve to the
+  // bin that contains each analog so the line aligns with the category axis.
   const topNEntries = data.entries.filter((e) => e.is_top_n);
-  const markLineData = topNEntries.map((e) => ({
-    xAxis: e.distance.toFixed(1),
-    label: {
-      formatter: `#${e.rank}`,
-      fontSize: 10,
-      position: "end" as const,
-    },
-    lineStyle: { color: "#e03131", type: "dashed" as const, width: 1 },
-  }));
+  const markLineData = topNEntries.map((e) => {
+    let idx = Math.floor((e.distance - dMin) / binWidth);
+    if (idx >= binCount) idx = binCount - 1;
+    if (idx < 0) idx = 0;
+    return {
+      xAxis: labels[idx],
+      label: {
+        formatter: `#${e.rank}`,
+        fontSize: 10,
+        position: "end" as const,
+      },
+      lineStyle: { color: "#e03131", type: "dashed" as const, width: 1 },
+    };
+  });
 
   distanceHistogramChart.setOption({
     tooltip: {

@@ -114,6 +114,14 @@ def seasonal_heatmap(
             morning_hours_used=fj.get("morning_hours_used", 0),
             afternoon_hours_used=fj.get("afternoon_hours_used", 0),
         )
+        # Skip days with insufficient data — classifying them would
+        # incorrectly label missing-data days as "low" sea-breeze days.
+        if (
+            feat.wind_speed_increase is None
+            and feat.wind_direction_shift is None
+            and feat.onshore_fraction is None
+        ):
+            continue
         classification = classify_sea_breeze(feat)
         days.append(
             LibraryDaySummary(
