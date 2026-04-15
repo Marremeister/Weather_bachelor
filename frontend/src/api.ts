@@ -1,4 +1,4 @@
-import type { AnalogHourlyResponse, AnalysisRequest, AnalysisRunDetail, AnalysisRunSummary, AnalogResult, BiasReportResponse, DistanceDistributionData, ForecastCompositeData, HealthResponse, LibraryStatusResponse, Location, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, WeatherFetchResponse, WeatherRecord } from "./types";
+import type { AnalogHourlyResponse, AnalysisRequest, AnalysisRunDetail, AnalysisRunSummary, AnalogResult, BiasReportResponse, DistanceDistributionData, ForecastCompositeData, HealthResponse, LibraryStatusResponse, Location, ObservationFetchResponse, ObservationRecord, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, ValidationMetrics, WeatherFetchResponse, WeatherRecord, WeatherStation } from "./types";
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch("/api/health");
@@ -230,4 +230,53 @@ export async function getForecastComposite(
   const res = await fetch(`/api/analysis/${runId}/forecast`);
   if (!res.ok) throw new Error(`Forecast composite fetch failed: ${res.status}`);
   return res.json() as Promise<ForecastCompositeData>;
+}
+
+export async function fetchStations(): Promise<WeatherStation[]> {
+  const res = await fetch("/api/observations/stations");
+  if (!res.ok) throw new Error(`Stations fetch failed: ${res.status}`);
+  return res.json() as Promise<WeatherStation[]>;
+}
+
+export async function fetchObservations(
+  stationId: number,
+  startDate: string,
+  endDate: string,
+): Promise<ObservationFetchResponse> {
+  const res = await fetch("/api/observations/fetch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      station_id: stationId,
+      start_date: startDate,
+      end_date: endDate,
+    }),
+  });
+  if (!res.ok) throw new Error(`Observation fetch failed: ${res.status}`);
+  return res.json() as Promise<ObservationFetchResponse>;
+}
+
+export async function getObservations(
+  stationId: number,
+  startDate: string,
+  endDate: string,
+): Promise<ObservationRecord[]> {
+  const params = new URLSearchParams({
+    station_id: String(stationId),
+    start_date: startDate,
+    end_date: endDate,
+  });
+  const res = await fetch(`/api/observations?${params}`);
+  if (!res.ok) throw new Error(`Observations query failed: ${res.status}`);
+  return res.json() as Promise<ObservationRecord[]>;
+}
+
+export async function getValidationMetrics(
+  runId: number,
+  stationId: number,
+): Promise<ValidationMetrics> {
+  const params = new URLSearchParams({ station_id: String(stationId) });
+  const res = await fetch(`/api/observations/validate/${runId}?${params}`);
+  if (!res.ok) throw new Error(`Validation metrics fetch failed: ${res.status}`);
+  return res.json() as Promise<ValidationMetrics>;
 }

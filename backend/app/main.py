@@ -11,7 +11,8 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import SessionLocal
 from app.models.location import Location
-from app.routers import analysis, classification, library, locations, weather
+from app.models.weather_station import WeatherStation
+from app.routers import analysis, classification, library, locations, observations, weather
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -34,9 +35,30 @@ def _seed_default_location() -> None:
             db.commit()
 
 
+def _seed_default_station() -> None:
+    """Insert the default KLAX weather station if it doesn't already exist."""
+    with SessionLocal() as db:
+        exists = db.execute(
+            select(WeatherStation).where(WeatherStation.station_code == "KLAX")
+        ).scalar_one_or_none()
+        if exists is None:
+            db.add(
+                WeatherStation(
+                    name="Los Angeles Intl Airport",
+                    station_code="KLAX",
+                    source="iem_asos",
+                    latitude=33.9425,
+                    longitude=-118.408,
+                    timezone="America/Los_Angeles",
+                )
+            )
+            db.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _seed_default_location()
+    _seed_default_station()
     yield
 
 
@@ -56,6 +78,7 @@ app.include_router(weather.router)
 app.include_router(classification.router)
 app.include_router(analysis.router)
 app.include_router(library.router)
+app.include_router(observations.router)
 
 
 def _get_psycopg_dsn() -> str:

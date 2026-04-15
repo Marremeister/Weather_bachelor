@@ -14,7 +14,7 @@ import {
   VisualMapPiecewiseComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
-import type { WeatherRecord, BiasCorrection, DayHourlyRecords, SeaBreezePanelData, SeasonalHeatmapData, DistanceDistributionData, ForecastCompositeData, DayHourlyRecords as DayHourly } from "./types";
+import type { WeatherRecord, BiasCorrection, DayHourlyRecords, SeaBreezePanelData, SeasonalHeatmapData, DistanceDistributionData, ForecastCompositeData, DayHourlyRecords as DayHourly, ObservationRecord } from "./types";
 
 use([
   LineChart,
@@ -1369,6 +1369,7 @@ export function renderForecastChart(
   data: ForecastCompositeData,
   analogTraces?: DayHourlyRecords[],
   showTraces?: boolean,
+  observations?: ObservationRecord[],
 ): void {
   if (forecastChart) forecastChart.dispose();
 
@@ -1490,6 +1491,56 @@ export function renderForecastChart(
     });
   }
 
+  // Optional observation overlay
+  if (observations && observations.length > 0) {
+    // Build lookup by hour
+    const obsByHour = new Map<number, ObservationRecord>();
+    for (const obs of observations) {
+      const h = new Date(obs.observation_time_local).getHours();
+      if (!obsByHour.has(h)) obsByHour.set(h, obs);
+    }
+
+    const obsTwsData = xLabels.map((_, hi) => {
+      const targetHour = hours[hi].hour_local;
+      const obs = obsByHour.get(targetHour);
+      return obs?.wind_speed ?? null;
+    });
+
+    const obsTwdData = xLabels.map((_, hi) => {
+      const targetHour = hours[hi].hour_local;
+      const obs = obsByHour.get(targetHour);
+      return obs?.wind_direction ?? null;
+    });
+
+    series.push({
+      name: "Observed TWS",
+      type: "line",
+      data: obsTwsData,
+      smooth: true,
+      symbol: "diamond",
+      symbolSize: 7,
+      lineStyle: { color: "#2b8a3e", width: 2 },
+      itemStyle: { color: "#2b8a3e" },
+      z: 6,
+    });
+
+    series.push({
+      name: "Observed TWD",
+      type: "scatter",
+      yAxisIndex: 1,
+      data: obsTwdData,
+      symbolSize: 7,
+      symbol: "diamond",
+      itemStyle: { color: "#2b8a3e" },
+      z: 6,
+    });
+  }
+
+  const legendData = ["Median TWS", "P25-P75 (IQR)", "Mean TWD"];
+  if (observations && observations.length > 0) {
+    legendData.push("Observed TWS", "Observed TWD");
+  }
+
   forecastChart.setOption({
     tooltip: {
       trigger: "axis",
@@ -1522,7 +1573,7 @@ export function renderForecastChart(
     legend: {
       top: 0,
       left: "center",
-      data: ["Median TWS", "P25-P75 (IQR)", "Mean TWD"],
+      data: legendData,
     },
     grid: { left: 50, right: 65, top: 35, bottom: 50 },
     xAxis: {

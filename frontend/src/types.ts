@@ -229,3 +229,53 @@ export interface ForecastCompositeData {
   hours: ForecastCompositeHour[] | null;
   summary: string | null;
 }
+
+export interface WeatherStation {
+  id: number;
+  name: string;
+  station_code: string;
+  source: string;
+  latitude: number;
+  longitude: number;
+  timezone: string;
+  created_at: string;
+}
+
+export interface ObservationRecord {
+  id: number;
+  station_id: number;
+  observation_time_utc: string;
+  observation_time_local: string;
+  wind_speed: number | null;
+  wind_direction: number | null;
+  gust_speed: number | null;
+  temperature: number | null;
+  pressure: number | null;
+  created_at: string;
+}
+
+export interface ObservationFetchResponse {
+  station_id: number;
+  station_code: string;
+  source: string;
+  start_date: string;
+  end_date: string;
+  count: number;
+  cached: boolean;
+}
+
+export interface ValidationMetrics {
+  tws_mae: number | null;
+  tws_max_error: number | null;
+  twd_circular_mae: number | null;
+  twd_max_error: number | null;
+  peak_speed_forecast: number | null;
+  peak_speed_observed: number | null;
+  peak_speed_error: number | null;
+  onset_hour_forecast: number | null;
+  onset_hour_observed: number | null;
+  onset_error_hours: number | null;
+  matched_hours: number;
+  total_forecast_hours: number;
+  total_observation_hours: number;
+}

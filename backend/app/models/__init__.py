@@ -4,8 +4,10 @@ from app.models.analysis_run import AnalysisRun
 from app.models.daily_feature import DailyFeatureRow
 from app.models.library_build_job import LibraryBuildJob
 from app.models.location import Location
+from app.models.observation import Observation
 from app.models.source_bias_correction import SourceBiasCorrection
 from app.models.weather_record import WeatherRecord
+from app.models.weather_station import WeatherStation
 
 __all__ = [
     "Base",
@@ -14,6 +16,8 @@ __all__ = [
     "DailyFeatureRow",
     "LibraryBuildJob",
     "Location",
+    "Observation",
     "SourceBiasCorrection",
     "WeatherRecord",
+    "WeatherStation",
 ]

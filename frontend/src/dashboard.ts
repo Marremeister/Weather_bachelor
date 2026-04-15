@@ -1,4 +1,4 @@
-import type { AnalogResult, AnalysisRunDetail, BiasCorrection, ForecastCompositeData, LibraryStatusResponse, SeaBreezePanelData, WeatherRecord } from "./types";
+import type { AnalogResult, AnalysisRunDetail, BiasCorrection, ForecastCompositeData, LibraryStatusResponse, SeaBreezePanelData, ValidationMetrics, WeatherRecord } from "./types";
 import { renderAnalogDonutChart } from "./charts";
 
 export function renderSummaryPanel(
@@ -495,6 +495,56 @@ export function renderForecastTable(
     .join("");
 
   container.innerHTML = `${headerRow}<tbody>${bodyRows}</tbody>`;
+}
+
+export function renderValidationMetrics(
+  container: HTMLElement,
+  metrics: ValidationMetrics,
+): void {
+  function badge(value: number | null, thresholds: [number, number], unit: string): string {
+    if (value == null) return `<span class="quality-badge neutral">N/A</span>`;
+    const cls = value <= thresholds[0] ? "good" : value <= thresholds[1] ? "warning" : "bad";
+    return `<span class="quality-badge ${cls}">${value.toFixed(1)} ${unit}</span>`;
+  }
+
+  const items: string[] = [];
+
+  items.push(`
+    <div class="summary-item">
+      <span class="label">TWS MAE (11\u201316h)</span>
+      <span class="value">${badge(metrics.tws_mae, [1, 2], "m/s")}</span>
+    </div>
+  `);
+
+  items.push(`
+    <div class="summary-item">
+      <span class="label">TWD Circular MAE</span>
+      <span class="value">${badge(metrics.twd_circular_mae, [30, 60], "\u00b0")}</span>
+    </div>
+  `);
+
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Peak Speed</span>
+      <span class="value">${metrics.peak_speed_forecast != null ? metrics.peak_speed_forecast.toFixed(1) : "\u2014"} vs ${metrics.peak_speed_observed != null ? metrics.peak_speed_observed.toFixed(1) : "\u2014"} m/s${metrics.peak_speed_error != null ? ` (\u0394${metrics.peak_speed_error.toFixed(1)})` : ""}</span>
+    </div>
+  `);
+
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Onset Hour</span>
+      <span class="value">${metrics.onset_hour_forecast != null ? `${String(metrics.onset_hour_forecast).padStart(2, "0")}:00` : "\u2014"} vs ${metrics.onset_hour_observed != null ? `${String(metrics.onset_hour_observed).padStart(2, "0")}:00` : "\u2014"}${metrics.onset_error_hours != null ? ` (\u0394${metrics.onset_error_hours}h)` : ""}</span>
+    </div>
+  `);
+
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Matched Hours</span>
+      <span class="value">${metrics.matched_hours} of ${metrics.total_forecast_hours} forecast / ${metrics.total_observation_hours} observed</span>
+    </div>
+  `);
+
+  container.innerHTML = items.join("");
 }
 
 function fmt(value: number | null, decimals: number): string {

@@ -2,14 +2,18 @@ import {
   fetchClassification,
   fetchHealth,
   fetchLocations,
+  fetchObservations,
+  fetchStations,
   getAnalogHourly,
   getAnalysisRun,
   getBiasReport,
   getDistanceDistribution,
   getForecastComposite,
   getLibraryStatus,
+  getObservations,
   getSeaBreezePanel,
   getSeasonalHeatmap,
+  getValidationMetrics,
   getWeatherRecords,
   listAnalysisRuns,
   runAnalysis,
@@ -25,6 +29,7 @@ import {
   renderAnalogProbability,
   renderForecastGateBadge,
   renderForecastTable,
+  renderValidationMetrics,
 } from "./dashboard";
 import {
   downloadWeatherCsv,
@@ -44,7 +49,7 @@ import {
   downloadForecastChart,
   downloadForecastCsv,
 } from "./export";
-import type { AnalogHourlyResponse, AnalysisRunDetail, ForecastCompositeData, Location, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, WeatherRecord } from "./types";
+import type { AnalogHourlyResponse, AnalysisRunDetail, ForecastCompositeData, Location, ObservationRecord, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, WeatherRecord, WeatherStation } from "./types";
 import "./styles.css";
 
 // --- DOM refs ---
@@ -106,6 +111,11 @@ const forecastTracesToggle = document.getElementById("forecast-traces-toggle") a
 const exportForecastPngBtn = document.getElementById("export-forecast-png-btn") as HTMLButtonElement;
 const exportForecastCsvBtn = document.getElementById("export-forecast-csv-btn") as HTMLButtonElement;
 
+// Validation / Observations
+const validationSection = document.getElementById("validation-section")!;
+const stationSelect = document.getElementById("station-select") as HTMLSelectElement;
+const validationMetricsEl = document.getElementById("validation-metrics")!;
+
 // Wind rose
 const windroseSection = document.getElementById("windrose-section")!;
 const morningWindroseEl = document.getElementById("morning-windrose-chart")!;
@@ -145,6 +155,8 @@ let locations: Location[] = [];
 let currentRunId: number | null = null;
 let currentTargetDate = "";
 let currentMode: "historical" | "forecast" = "historical";
+let currentStations: WeatherStation[] = [];
+let currentObservations: ObservationRecord[] = [];
 let currentAnalogHourly: AnalogHourlyResponse | null = null;
 let currentAnalogMetric: "tws" | "twd" = "tws";
 let currentHeatmapData: SeasonalHeatmapData | null = null;
@@ -224,6 +236,56 @@ async function initLocations() {
     locationsEl.innerHTML = `<p class="status-error">Could not load locations.</p>`;
   }
 }
+
+async function initStations() {
+  try {
+    currentStations = await fetchStations();
+    if (currentStations.length > 0) {
+      stationSelect.innerHTML =
+        `<option value="">Select station...</option>` +
+        currentStations
+          .map((s) => `<option value="${s.id}">${s.station_code} — ${s.name}</option>`)
+          .join("");
+    }
+  } catch {
+    // Stations are optional; don't block boot
+  }
+}
+
+async function loadObservationOverlay() {
+  const stationId = Number(stationSelect.value);
+  if (!stationId || !currentRunId || !currentTargetDate || !currentForecastData) {
+    currentObservations = [];
+    validationMetricsEl.innerHTML = "";
+    // Re-render chart without observations
+    if (currentForecastData) {
+      const traces = forecastTracesVisible ? currentForecastTraces?.analogs : undefined;
+      renderForecastChart(forecastChartEl, currentForecastData, traces, forecastTracesVisible);
+    }
+    return;
+  }
+
+  try {
+    // Fetch + cache observations
+    await fetchObservations(stationId, currentTargetDate, currentTargetDate);
+    currentObservations = await getObservations(stationId, currentTargetDate, currentTargetDate);
+
+    // Re-render chart with observation overlay
+    const traces = forecastTracesVisible ? currentForecastTraces?.analogs : undefined;
+    renderForecastChart(forecastChartEl, currentForecastData, traces, forecastTracesVisible, currentObservations);
+
+    // Load validation metrics
+    const metrics = await getValidationMetrics(currentRunId, stationId);
+    renderValidationMetrics(validationMetricsEl, metrics);
+  } catch {
+    currentObservations = [];
+    validationMetricsEl.innerHTML = `<p style="color:#868e96;font-size:0.85rem;">Could not load observations or validation metrics.</p>`;
+  }
+}
+
+stationSelect.addEventListener("change", () => {
+  loadObservationOverlay();
+});
 
 function setDefaultDates() {
   const today = new Date();
@@ -665,6 +727,7 @@ async function renderForecastPanel(
   // Hide for historical mode
   if (mode !== "forecast") {
     forecastCompositeSection.hidden = true;
+    validationSection.hidden = true;
     return;
   }
 
@@ -674,6 +737,8 @@ async function renderForecastPanel(
     forecastTracesVisible = false;
     forecastTracesToggle.checked = false;
     currentForecastTraces = null;
+    currentObservations = [];
+    validationMetricsEl.innerHTML = "";
 
     renderForecastGateBadge(forecastGateBadge, data);
 
@@ -687,6 +752,12 @@ async function renderForecastPanel(
       exportForecastPngBtn.hidden = false;
       exportForecastCsvBtn.hidden = false;
       forecastTracesToggle.parentElement!.hidden = false;
+      validationSection.hidden = false;
+
+      // Auto-load observations if a station is selected
+      if (stationSelect.value) {
+        loadObservationOverlay();
+      }
     } else {
       disposeForecastChart();
       forecastChartEl.innerHTML = "";
@@ -694,6 +765,7 @@ async function renderForecastPanel(
       exportForecastPngBtn.hidden = true;
       exportForecastCsvBtn.hidden = true;
       forecastTracesToggle.parentElement!.hidden = true;
+      validationSection.hidden = true;
     }
 
     forecastCompositeSection.hidden = false;
@@ -719,7 +791,8 @@ forecastTracesToggle.addEventListener("change", async () => {
   }
 
   const traces = forecastTracesVisible ? currentForecastTraces?.analogs : undefined;
-  renderForecastChart(forecastChartEl, currentForecastData, traces, forecastTracesVisible);
+  const obs = currentObservations.length > 0 ? currentObservations : undefined;
+  renderForecastChart(forecastChartEl, currentForecastData, traces, forecastTracesVisible, obs);
 });
 
 // Forecast export buttons
@@ -785,5 +858,6 @@ classifyBtn.addEventListener("click", async () => {
 
 initHealth();
 initLocations();
+initStations();
 setDefaultDates();
 loadHistory();
