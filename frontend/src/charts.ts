@@ -1,5 +1,5 @@
 import { use, init, type ECharts } from "echarts/core";
-import { LineChart, ScatterChart, BarChart, CustomChart, PieChart } from "echarts/charts";
+import { LineChart, ScatterChart, BarChart, CustomChart, PieChart, RadarChart, HeatmapChart } from "echarts/charts";
 import {
   GridComponent,
   TitleComponent,
@@ -7,9 +7,14 @@ import {
   DataZoomComponent,
   LegendComponent,
   PolarComponent,
+  RadarComponent,
+  MarkLineComponent,
+  CalendarComponent,
+  VisualMapContinuousComponent,
+  VisualMapPiecewiseComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
-import type { WeatherRecord, BiasCorrection, DayHourlyRecords, SeaBreezePanelData } from "./types";
+import type { WeatherRecord, BiasCorrection, DayHourlyRecords, SeaBreezePanelData, SeasonalHeatmapData, DistanceDistributionData } from "./types";
 
 use([
   LineChart,
@@ -17,12 +22,19 @@ use([
   BarChart,
   CustomChart,
   PieChart,
+  RadarChart,
+  HeatmapChart,
   GridComponent,
   TitleComponent,
   TooltipComponent,
   DataZoomComponent,
   LegendComponent,
   PolarComponent,
+  RadarComponent,
+  MarkLineComponent,
+  CalendarComponent,
+  VisualMapContinuousComponent,
+  VisualMapPiecewiseComponent,
   CanvasRenderer,
 ]);
 
@@ -34,6 +46,10 @@ let biasChart: ECharts | null = null;
 let analogDonutChart: ECharts | null = null;
 let analogOverlayChart: ECharts | null = null;
 let speedIncreaseChart: ECharts | null = null;
+let featureRadarChart: ECharts | null = null;
+let directionShiftChart: ECharts | null = null;
+let seasonalHeatmapChart: ECharts | null = null;
+let distanceHistogramChart: ECharts | null = null;
 
 export function renderWindOverlayChart(
   container: HTMLElement,
@@ -791,6 +807,554 @@ export function getSpeedIncreaseChart(): ECharts | null {
   return speedIncreaseChart;
 }
 
+// --- Feature Radar Chart ---
+
+interface RadarFeatureDef {
+  key: keyof import("./types").DailyFeatures;
+  label: string;
+}
+
+const RADAR_FEATURES: RadarFeatureDef[] = [
+  { key: "morning_mean_wind_speed", label: "Morning Speed" },
+  { key: "morning_mean_wind_direction", label: "Morning Dir" },
+  { key: "reference_wind_speed", label: "Ref Speed" },
+  { key: "reference_wind_direction", label: "Ref Dir" },
+  { key: "afternoon_max_wind_speed", label: "Afternoon Max" },
+  { key: "afternoon_mean_wind_direction", label: "Afternoon Dir" },
+  { key: "wind_speed_increase", label: "Speed Increase" },
+  { key: "wind_direction_shift", label: "Dir Shift" },
+  { key: "onshore_fraction", label: "Onshore Frac" },
+];
+
+function getFeatureValue(features: import("./types").DailyFeatures, key: keyof import("./types").DailyFeatures): number | null {
+  const v = features[key];
+  return typeof v === "number" ? v : null;
+}
+
+export function renderFeatureRadarChart(
+  container: HTMLElement,
+  panelData: SeaBreezePanelData,
+): void {
+  if (featureRadarChart) featureRadarChart.dispose();
+  featureRadarChart = init(container);
+
+  if (!panelData.target) return;
+
+  const targetFeatures = panelData.target.features;
+
+  // Collect all feature values across target + analogs for normalization
+  const allValues: (number | null)[][] = RADAR_FEATURES.map(() => []);
+  for (let i = 0; i < RADAR_FEATURES.length; i++) {
+    const key = RADAR_FEATURES[i].key;
+    allValues[i].push(getFeatureValue(targetFeatures, key));
+    for (const analog of panelData.analogs) {
+      allValues[i].push(getFeatureValue(analog.features, key));
+    }
+  }
+
+  // Compute min/max for each feature
+  const mins: number[] = [];
+  const maxs: number[] = [];
+  for (let i = 0; i < RADAR_FEATURES.length; i++) {
+    const nums = allValues[i].filter((v): v is number => v != null);
+    if (nums.length === 0) {
+      mins.push(0);
+      maxs.push(1);
+    } else {
+      mins.push(Math.min(...nums));
+      maxs.push(Math.max(...nums));
+    }
+  }
+
+  function normalize(val: number | null, i: number): number {
+    if (val == null) return 0;
+    const range = maxs[i] - mins[i];
+    if (range === 0) return 0.5;
+    return (val - mins[i]) / range;
+  }
+
+  // Compute analog mean features
+  const analogMeanRaw: (number | null)[] = RADAR_FEATURES.map((f, i) => {
+    const vals = panelData.analogs
+      .map((a) => getFeatureValue(a.features, f.key))
+      .filter((v): v is number => v != null);
+    if (vals.length === 0) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  });
+
+  // Actual values for tooltip
+  const targetRaw = RADAR_FEATURES.map((f) => getFeatureValue(targetFeatures, f.key));
+
+  // Normalized values for the polygon
+  const targetNorm = targetRaw.map((v, i) => normalize(v, i));
+  const analogMeanNorm = analogMeanRaw.map((v, i) => normalize(v, i));
+
+  const indicators = RADAR_FEATURES.map((f) => ({
+    name: f.label,
+    max: 1,
+  }));
+
+  featureRadarChart.setOption({
+    tooltip: {
+      trigger: "item",
+      formatter(params: unknown) {
+        const p = params as { seriesName: string; value: number[]; name: string };
+        const raw = p.seriesName === "Target" ? targetRaw : analogMeanRaw;
+        let html = `<strong>${p.seriesName}</strong>`;
+        for (let i = 0; i < RADAR_FEATURES.length; i++) {
+          const v = raw[i];
+          const unit = RADAR_FEATURES[i].key.includes("direction") || RADAR_FEATURES[i].key === "wind_direction_shift" ? "°" :
+                       RADAR_FEATURES[i].key === "onshore_fraction" ? "" : " m/s";
+          html += `<br/>${RADAR_FEATURES[i].label}: ${v != null ? v.toFixed(1) + unit : "N/A"}`;
+        }
+        return html;
+      },
+    },
+    legend: {
+      bottom: 0,
+      left: "center",
+      data: ["Target", "Analog Mean"],
+    },
+    radar: {
+      indicator: indicators,
+      shape: "polygon",
+      radius: "60%",
+      splitArea: { areaStyle: { color: ["rgba(34,139,230,0.02)", "rgba(34,139,230,0.05)"] } },
+      splitLine: { lineStyle: { color: "#dee2e6" } },
+      axisLine: { lineStyle: { color: "#dee2e6" } },
+      axisName: { fontSize: 11, color: "#495057" },
+    },
+    series: [
+      {
+        type: "radar",
+        data: [
+          {
+            value: targetNorm,
+            name: "Target",
+            lineStyle: { color: "#228be6", width: 2 },
+            itemStyle: { color: "#228be6" },
+            areaStyle: { color: "rgba(34,139,230,0.15)" },
+            symbol: "circle",
+            symbolSize: 5,
+          },
+          {
+            value: analogMeanNorm,
+            name: "Analog Mean",
+            lineStyle: { color: "#e67700", width: 2, type: "dashed" },
+            itemStyle: { color: "#e67700" },
+            areaStyle: { color: "rgba(230,119,0,0.10)" },
+            symbol: "circle",
+            symbolSize: 5,
+          },
+        ],
+      },
+    ],
+  });
+}
+
+export function getFeatureRadarChart(): ECharts | null {
+  return featureRadarChart;
+}
+
+// --- Direction Shift Lollipop Chart ---
+
+export function renderDirectionShiftChart(
+  container: HTMLElement,
+  panelData: SeaBreezePanelData,
+): void {
+  if (directionShiftChart) directionShiftChart.dispose();
+
+  // Build data: target first, then analogs
+  const labels: string[] = [];
+  const values: (number | null)[] = [];
+  const colors: string[] = [];
+
+  if (panelData.target) {
+    labels.push(`Target (${panelData.target.date})`);
+    values.push(panelData.target.features.wind_direction_shift);
+    colors.push("#228be6");
+  }
+
+  for (const analog of panelData.analogs) {
+    labels.push(analog.date);
+    values.push(analog.features.wind_direction_shift);
+    colors.push("#adb5bd");
+  }
+
+  // Reverse for horizontal bar (bottom-to-top order)
+  labels.reverse();
+  values.reverse();
+  colors.reverse();
+
+  // Dynamic height: 40px per bar, minimum 200px
+  const dynamicHeight = Math.max(200, labels.length * 40 + 80);
+  container.style.height = `${dynamicHeight}px`;
+
+  directionShiftChart = init(container);
+
+  // Compute symmetric range
+  const absMax = Math.max(...values.map((v) => (v != null ? Math.abs(v) : 0)), 10);
+  const axisLimit = Math.ceil(absMax / 10) * 10;
+
+  // Color bars by sign + magnitude; target gets its own color
+  const maxAbs = Math.max(...values.map((v) => (v != null ? Math.abs(v) : 0)), 1);
+  const barData = values.map((v, i) => {
+    if (v == null) return { value: 0, itemStyle: { color: "#dee2e6" } };
+    const isTarget = colors[i] === "#228be6";
+    if (isTarget) {
+      return { value: v, itemStyle: { color: "#228be6", borderColor: "#1971c2", borderWidth: 1 } };
+    }
+    const intensity = Math.abs(v) / maxAbs;
+    const alpha = 0.3 + intensity * 0.7;
+    const color = v >= 0
+      ? `rgba(34,139,230,${alpha.toFixed(2)})`   // blue for veering (positive)
+      : `rgba(224,49,49,${alpha.toFixed(2)})`;    // red for backing (negative)
+    return { value: v, itemStyle: { color } };
+  });
+
+  directionShiftChart.setOption({
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter(params: unknown) {
+        const items = params as Array<{ axisValueLabel: string; value: number | null }>;
+        if (!items.length) return "";
+        const item = items[0];
+        const val = item.value != null ? `${item.value.toFixed(1)}°` : "N/A";
+        return `${item.axisValueLabel}: ${val}`;
+      },
+    },
+    grid: { left: 140, right: 80, top: 10, bottom: 30 },
+    xAxis: {
+      type: "value",
+      min: -axisLimit,
+      max: axisLimit,
+      name: "Backing (CCW)                                              Veering (CW)",
+      nameLocation: "middle",
+      nameGap: 18,
+      nameTextStyle: { fontSize: 10, color: "#868e96" },
+    },
+    yAxis: {
+      type: "category",
+      data: labels,
+      axisLabel: { fontSize: 11 },
+    },
+    series: [
+      {
+        type: "bar",
+        data: barData,
+        barWidth: "60%",
+        label: {
+          show: true,
+          position: "right",
+          formatter(params: { value: number | null; dataIndex: number }) {
+            if (params.value == null) return "";
+            // Place label on the correct side
+            return `${params.value > 0 ? "+" : ""}${params.value.toFixed(1)}°`;
+          },
+          fontSize: 11,
+        },
+        markLine: {
+          silent: true,
+          symbol: "none",
+          lineStyle: { color: "#868e96", type: "solid", width: 1 },
+          data: [{ xAxis: 0 }],
+          label: { show: false },
+        },
+      },
+    ],
+  });
+}
+
+export function getDirectionShiftChart(): ECharts | null {
+  return directionShiftChart;
+}
+
+// --- Seasonal Calendar Heatmap ---
+
+const CLASSIFICATION_COLORS: Record<string, string> = {
+  high: "#2b8a3e",
+  medium: "#e67700",
+  low: "#c92a2a",
+};
+
+export function renderSeasonalHeatmapChart(
+  container: HTMLElement,
+  data: SeasonalHeatmapData,
+  colorMode: "speed" | "classification",
+): void {
+  if (seasonalHeatmapChart) seasonalHeatmapChart.dispose();
+
+  if (data.days.length === 0) return;
+
+  // Determine year range
+  const years = new Set<number>();
+  for (const d of data.days) years.add(new Date(d.date).getFullYear());
+  const sortedYears = [...years].sort();
+
+  // Dynamic height: ~180px per year + 80px padding
+  const dynamicHeight = Math.max(300, sortedYears.length * 180 + 80);
+  container.style.height = `${dynamicHeight}px`;
+
+  seasonalHeatmapChart = init(container);
+
+  // Build calendar configs and heatmap data
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const calendars: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const series: any[] = [];
+
+  const targetDateStr = data.target_date ?? "";
+  const analogDateSet = new Set(data.analog_dates);
+
+  sortedYears.forEach((year, idx) => {
+    calendars.push({
+      top: idx * 170 + 60,
+      left: 60,
+      right: 40,
+      cellSize: ["auto", 16],
+      range: [`${year}-05-01`, `${year}-09-30`],
+      itemStyle: { borderWidth: 1, borderColor: "#e9ecef" },
+      splitLine: { lineStyle: { color: "#dee2e6" } },
+      yearLabel: { show: true, position: "left", fontSize: 14 },
+      dayLabel: { firstDay: 1, nameMap: "en", fontSize: 10 },
+      monthLabel: { fontSize: 11 },
+    });
+
+    // Heatmap series for this calendar year
+    const yearDays = data.days.filter((d) => new Date(d.date).getFullYear() === year);
+
+    if (colorMode === "speed") {
+      series.push({
+        type: "heatmap",
+        coordinateSystem: "calendar",
+        calendarIndex: idx,
+        data: yearDays.map((d) => [d.date, d.wind_speed_increase ?? 0]),
+      });
+    } else {
+      // Classification mode: use piecewise colors
+      series.push({
+        type: "heatmap",
+        coordinateSystem: "calendar",
+        calendarIndex: idx,
+        data: yearDays.map((d) => {
+          const val = d.classification === "high" ? 3 : d.classification === "medium" ? 2 : 1;
+          return [d.date, val];
+        }),
+      });
+    }
+
+    // Scatter markers for target + analog dates in this year
+    const markers: [string, number, string][] = [];
+    if (targetDateStr && new Date(targetDateStr).getFullYear() === year) {
+      markers.push([targetDateStr, 1, "Target"]);
+    }
+    for (const ad of data.analog_dates) {
+      if (new Date(ad).getFullYear() === year) {
+        markers.push([ad, 1, "Analog"]);
+      }
+    }
+    if (markers.length > 0) {
+      series.push({
+        type: "scatter",
+        coordinateSystem: "calendar",
+        calendarIndex: idx,
+        symbolSize: 10,
+        data: markers.map((m) => ({
+          value: [m[0], m[1]],
+          itemStyle: {
+            color: m[2] === "Target" ? "#228be6" : "#e03131",
+            borderColor: "#fff",
+            borderWidth: 1.5,
+          },
+        })),
+        tooltip: {
+          formatter(params: unknown) {
+            const p = params as { value: [string, number] };
+            const dateStr = p.value[0];
+            const isTarget = dateStr === targetDateStr;
+            const isAnalog = analogDateSet.has(dateStr);
+            const labels: string[] = [];
+            if (isTarget) labels.push("Target");
+            if (isAnalog) labels.push("Analog");
+            return `${dateStr}<br/>${labels.join(", ")}`;
+          },
+        },
+        z: 10,
+      });
+    }
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let visualMap: any;
+  if (colorMode === "speed") {
+    // Compute min/max
+    const vals = data.days
+      .map((d) => d.wind_speed_increase)
+      .filter((v): v is number => v != null);
+    const vMin = vals.length > 0 ? Math.min(...vals) : 0;
+    const vMax = vals.length > 0 ? Math.max(...vals) : 5;
+    visualMap = {
+      type: "continuous",
+      min: vMin,
+      max: vMax,
+      calculable: true,
+      orient: "horizontal",
+      left: "center",
+      top: 10,
+      inRange: { color: ["#f8f9fa", "#74c0fc", "#228be6", "#1864ab"] },
+      text: [`${vMax.toFixed(1)} m/s`, `${vMin.toFixed(1)} m/s`],
+      textStyle: { fontSize: 11 },
+    };
+  } else {
+    visualMap = {
+      type: "piecewise",
+      categories: ["1", "2", "3"],
+      orient: "horizontal",
+      left: "center",
+      top: 10,
+      inRange: {
+        color: [CLASSIFICATION_COLORS.low, CLASSIFICATION_COLORS.medium, CLASSIFICATION_COLORS.high],
+      },
+      formatter(val: string) {
+        return val === "3" ? "High" : val === "2" ? "Medium" : "Low";
+      },
+      textStyle: { fontSize: 11 },
+    };
+  }
+
+  seasonalHeatmapChart.setOption({
+    tooltip: {
+      formatter(params: unknown) {
+        const p = params as { value: [string, number]; seriesType: string };
+        if (p.seriesType === "scatter") return "";
+        const dateStr = p.value[0];
+        const day = data.days.find((d) => d.date === dateStr);
+        if (!day) return dateStr;
+        const spd = day.wind_speed_increase != null ? `${day.wind_speed_increase.toFixed(2)} m/s` : "N/A";
+        return `${dateStr}<br/>Speed Increase: ${spd}<br/>Classification: ${day.classification}`;
+      },
+    },
+    visualMap,
+    calendar: calendars,
+    series,
+  });
+}
+
+export function getSeasonalHeatmapChart(): ECharts | null {
+  return seasonalHeatmapChart;
+}
+
+// --- Distance Distribution Histogram ---
+
+export function renderDistanceHistogramChart(
+  container: HTMLElement,
+  data: DistanceDistributionData,
+): void {
+  if (distanceHistogramChart) distanceHistogramChart.dispose();
+
+  if (data.entries.length === 0) return;
+
+  distanceHistogramChart = init(container);
+
+  // Bin distances into histogram
+  const distances = data.entries.map((e) => e.distance);
+  const dMin = Math.min(...distances);
+  const dMax = Math.max(...distances);
+  const binCount = Math.min(40, Math.max(15, Math.ceil(Math.sqrt(distances.length))));
+  const binWidth = (dMax - dMin) / binCount || 1;
+
+  interface Bin {
+    start: number;
+    end: number;
+    count: number;
+    topNCount: number;
+  }
+  const bins: Bin[] = [];
+  for (let i = 0; i < binCount; i++) {
+    bins.push({ start: dMin + i * binWidth, end: dMin + (i + 1) * binWidth, count: 0, topNCount: 0 });
+  }
+
+  for (const entry of data.entries) {
+    let idx = Math.floor((entry.distance - dMin) / binWidth);
+    if (idx >= binCount) idx = binCount - 1;
+    if (idx < 0) idx = 0;
+    bins[idx].count++;
+    if (entry.is_top_n) bins[idx].topNCount++;
+  }
+
+  const labels = bins.map((b) => b.start.toFixed(1));
+  const barData = bins.map((b) => ({
+    value: b.count,
+    itemStyle: {
+      color: b.topNCount > 0 ? "#228be6" : "#adb5bd",
+    },
+  }));
+
+  // Mark lines for individual top-N analog distances
+  const topNEntries = data.entries.filter((e) => e.is_top_n);
+  const markLineData = topNEntries.map((e) => ({
+    xAxis: e.distance.toFixed(1),
+    label: {
+      formatter: `#${e.rank}`,
+      fontSize: 10,
+      position: "end" as const,
+    },
+    lineStyle: { color: "#e03131", type: "dashed" as const, width: 1 },
+  }));
+
+  distanceHistogramChart.setOption({
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter(params: unknown) {
+        const items = params as Array<{ axisValueLabel: string; value: number }>;
+        if (!items.length) return "";
+        const item = items[0];
+        const binIdx = labels.indexOf(item.axisValueLabel);
+        const bin = binIdx >= 0 ? bins[binIdx] : null;
+        let html = `Distance: ${item.axisValueLabel}–${bin ? bin.end.toFixed(1) : "?"}<br/>`;
+        html += `Count: ${item.value}`;
+        if (bin && bin.topNCount > 0) {
+          html += `<br/><span style="color:#228be6">Top-N analogs: ${bin.topNCount}</span>`;
+        }
+        return html;
+      },
+    },
+    grid: { left: 60, right: 30, top: 40, bottom: 60 },
+    xAxis: {
+      type: "category",
+      data: labels,
+      name: "Euclidean Distance",
+      nameLocation: "middle",
+      nameGap: 35,
+      axisLabel: { rotate: 45, fontSize: 10 },
+    },
+    yAxis: {
+      type: "value",
+      name: "Count",
+      nameLocation: "middle",
+      nameGap: 40,
+    },
+    series: [
+      {
+        type: "bar",
+        data: barData,
+        barWidth: "90%",
+        markLine: {
+          silent: true,
+          symbol: "none",
+          data: markLineData,
+        },
+      },
+    ],
+  });
+}
+
+export function getDistanceHistogramChart(): ECharts | null {
+  return distanceHistogramChart;
+}
+
 function handleResize() {
   windOverlayChart?.resize();
   tempPressureChart?.resize();
@@ -800,6 +1364,10 @@ function handleResize() {
   analogDonutChart?.resize();
   analogOverlayChart?.resize();
   speedIncreaseChart?.resize();
+  featureRadarChart?.resize();
+  directionShiftChart?.resize();
+  seasonalHeatmapChart?.resize();
+  distanceHistogramChart?.resize();
 }
 
 window.addEventListener("resize", handleResize);

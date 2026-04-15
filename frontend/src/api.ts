@@ -1,4 +1,4 @@
-import type { AnalogHourlyResponse, AnalysisRequest, AnalysisRunDetail, AnalysisRunSummary, AnalogResult, BiasReportResponse, HealthResponse, LibraryStatusResponse, Location, SeaBreezeClassification, SeaBreezePanelData, WeatherFetchResponse, WeatherRecord } from "./types";
+import type { AnalogHourlyResponse, AnalysisRequest, AnalysisRunDetail, AnalysisRunSummary, AnalogResult, BiasReportResponse, DistanceDistributionData, HealthResponse, LibraryStatusResponse, Location, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, WeatherFetchResponse, WeatherRecord } from "./types";
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch("/api/health");
@@ -193,4 +193,33 @@ export async function getSeaBreezePanel(
     throw new Error(`Sea breeze panel fetch failed: ${res.status}`);
   }
   return res.json() as Promise<SeaBreezePanelData>;
+}
+
+export async function getSeasonalHeatmap(
+  locationId: number,
+  source: string = "era5",
+  targetDate?: string,
+  analogDates?: string[],
+): Promise<SeasonalHeatmapData> {
+  const params = new URLSearchParams({
+    location_id: String(locationId),
+    source,
+  });
+  if (targetDate) params.set("target_date", targetDate);
+  if (analogDates) {
+    for (const d of analogDates) {
+      params.append("analog_dates", d);
+    }
+  }
+  const res = await fetch(`/api/library/seasonal-heatmap?${params}`);
+  if (!res.ok) throw new Error(`Seasonal heatmap fetch failed: ${res.status}`);
+  return res.json() as Promise<SeasonalHeatmapData>;
+}
+
+export async function getDistanceDistribution(
+  runId: number,
+): Promise<DistanceDistributionData> {
+  const res = await fetch(`/api/analysis/${runId}/distance-distribution`);
+  if (!res.ok) throw new Error(`Distance distribution fetch failed: ${res.status}`);
+  return res.json() as Promise<DistanceDistributionData>;
 }

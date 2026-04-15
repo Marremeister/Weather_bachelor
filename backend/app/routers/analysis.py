@@ -27,13 +27,17 @@ from app.schemas.analog import (
 )
 from app.schemas.weather import WeatherRecordResponse
 from app.schemas.features import (
+    AnalysisWindow,
     DayClassificationDetail,
+    DistanceDistributionResponse,
+    DistanceEntry,
     SeaBreezePanelResponse,
     SeaBreezeThresholds,
 )
-from app.services.analog_service import run_analog_analysis
-from app.services.feature_service import compute_daily_features
+from app.services.analog_service import compute_all_distances, run_analog_analysis
+from app.services.feature_service import compute_daily_features, compute_feature_config_hash
 from app.services.classification_service import classify_sea_breeze
+from app.services.library_service import get_precomputed_features
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
@@ -462,6 +466,95 @@ def get_analog_hourly(
         run_id=run.id,
         target=target,
         analogs=analog_items,
+    )
+
+
+@router.get("/{run_id}/distance-distribution", response_model=DistanceDistributionResponse)
+def get_distance_distribution(
+    run_id: int,
+    db: Session = Depends(get_db),
+):
+    """Return distances from the target day to ALL library days."""
+    run = db.get(AnalysisRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Analysis run not found")
+
+    # Load stored top-N analog results for marking
+    stored_analogs = (
+        db.execute(
+            select(AnalogResult)
+            .where(AnalogResult.analysis_run_id == run.id)
+            .order_by(AnalogResult.rank)
+        )
+        .scalars()
+        .all()
+    )
+    top_n_map: dict[_dt.date, int] = {a.analog_date: a.rank for a in stored_analogs}
+    top_n_dates = [a.analog_date for a in stored_analogs]
+
+    # Load target-day weather and compute features
+    target_source = run.forecast_source or run.historical_source
+    target_start_dt = _dt.datetime.combine(run.target_date, time.min)
+    target_end_dt = _dt.datetime.combine(run.target_date, time(23, 59, 59))
+    target_stmt = (
+        select(WeatherRecord)
+        .where(
+            WeatherRecord.location_id == run.location_id,
+            WeatherRecord.valid_time_local >= target_start_dt,
+            WeatherRecord.valid_time_local <= target_end_dt,
+        )
+    )
+    if target_source:
+        target_stmt = target_stmt.where(WeatherRecord.source == target_source)
+    target_records = (
+        db.execute(target_stmt.order_by(WeatherRecord.valid_time_local))
+        .scalars()
+        .all()
+    )
+    if not target_records:
+        raise HTTPException(status_code=404, detail="No target-day weather data found")
+
+    target_features = compute_daily_features(
+        target_records, run.location_id, run.target_date,
+    )
+
+    # Load full library
+    hist_source = run.historical_source or "era5"
+    config_hash = compute_feature_config_hash(AnalysisWindow())
+    historical_features = get_precomputed_features(
+        db, run.location_id, hist_source, config_hash,
+        start_date=run.historical_start_date,
+        end_date=run.historical_end_date,
+    )
+
+    if not historical_features:
+        return DistanceDistributionResponse(
+            run_id=run.id,
+            target_date=run.target_date,
+            entries=[],
+            top_n_dates=top_n_dates,
+        )
+
+    all_distances = compute_all_distances(target_features, historical_features)
+
+    entries: list[DistanceEntry] = []
+    for feat, dist in all_distances:
+        rank = top_n_map.get(feat.date)
+        entries.append(
+            DistanceEntry(
+                date=feat.date,
+                distance=dist,
+                similarity_score=1.0 / (1.0 + dist),
+                is_top_n=rank is not None,
+                rank=rank,
+            )
+        )
+
+    return DistanceDistributionResponse(
+        run_id=run.id,
+        target_date=run.target_date,
+        entries=entries,
+        top_n_dates=top_n_dates,
     )
 
 

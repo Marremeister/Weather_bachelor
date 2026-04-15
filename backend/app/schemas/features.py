@@ -69,3 +69,31 @@ class SeaBreezePanelResponse(BaseModel):
     analog_medium_count: int
     analog_low_count: int
     analog_total: int
+
+
+class LibraryDaySummary(BaseModel):
+    date: date
+    wind_speed_increase: float | None = None
+    classification: Literal["low", "medium", "high"]
+
+
+class SeasonalHeatmapResponse(BaseModel):
+    location_id: int
+    days: list[LibraryDaySummary]
+    target_date: date | None = None
+    analog_dates: list[date] = []
+
+
+class DistanceEntry(BaseModel):
+    date: date
+    distance: float
+    similarity_score: float
+    is_top_n: bool = False
+    rank: int | None = None
+
+
+class DistanceDistributionResponse(BaseModel):
+    run_id: int
+    target_date: date
+    entries: list[DistanceEntry]
+    top_n_dates: list[date] = []

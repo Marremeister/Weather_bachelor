@@ -108,6 +108,48 @@
         </div>
       </section>
 
+      <!-- Feature Radar & Direction Shift -->
+      <section id="feature-radar-section" class="charts-row" hidden>
+        <div class="card chart-card">
+          <div class="section-header">
+            <h3>Feature Radar — Target vs Analog Mean</h3>
+            <button id="export-feature-radar-png-btn" class="btn-export">Save PNG</button>
+          </div>
+          <div id="feature-radar-chart" class="chart-container"></div>
+        </div>
+        <div class="card chart-card">
+          <div class="section-header">
+            <h3>Direction Shift Comparison</h3>
+            <button id="export-direction-shift-png-btn" class="btn-export">Save PNG</button>
+          </div>
+          <div id="direction-shift-chart" class="chart-container"></div>
+        </div>
+      </section>
+
+      <!-- Seasonal Heatmap -->
+      <section class="card" id="seasonal-heatmap-section" hidden>
+        <div class="section-header">
+          <h3>Seasonal Calendar Heatmap</h3>
+          <div class="export-toolbar">
+            <div class="toggle-group" id="heatmap-color-toggle">
+              <button class="toggle-btn active" data-mode="speed">Speed Increase</button>
+              <button class="toggle-btn" data-mode="classification">Classification</button>
+            </div>
+            <button id="export-seasonal-heatmap-png-btn" class="btn-export">Save PNG</button>
+          </div>
+        </div>
+        <div id="seasonal-heatmap-chart" class="chart-container"></div>
+      </section>
+
+      <!-- Distance Distribution -->
+      <section class="card" id="distance-distribution-section" hidden>
+        <div class="section-header">
+          <h3>Analog Distance Distribution</h3>
+          <button id="export-distance-histogram-png-btn" class="btn-export">Save PNG</button>
+        </div>
+        <div id="distance-histogram-chart" class="chart-container"></div>
+      </section>
+
       <!-- Charts Row -->
       <section id="charts-section" class="charts-row" hidden>
         <div class="card chart-card">

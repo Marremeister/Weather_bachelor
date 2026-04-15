@@ -5,13 +5,15 @@ import {
   getAnalogHourly,
   getAnalysisRun,
   getBiasReport,
+  getDistanceDistribution,
   getLibraryStatus,
   getSeaBreezePanel,
+  getSeasonalHeatmap,
   getWeatherRecords,
   listAnalysisRuns,
   runAnalysis,
 } from "./api";
-import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart } from "./charts";
+import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart } from "./charts";
 import {
   renderSummaryPanel,
   renderHourlyTable,
@@ -32,8 +34,12 @@ import {
   downloadBiasChart,
   downloadAnalogOverlayChart,
   downloadSpeedIncreaseChart,
+  downloadFeatureRadarChart,
+  downloadDirectionShiftChart,
+  downloadSeasonalHeatmapChart,
+  downloadDistanceHistogramChart,
 } from "./export";
-import type { AnalogHourlyResponse, AnalysisRunDetail, Location, SeaBreezeClassification, SeaBreezePanelData, WeatherRecord } from "./types";
+import type { AnalogHourlyResponse, AnalysisRunDetail, Location, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, WeatherRecord } from "./types";
 import "./styles.css";
 
 // --- DOM refs ---
@@ -69,6 +75,22 @@ const speedIncreaseChartEl = document.getElementById("speed-increase-chart")!;
 const analogMetricToggle = document.getElementById("analog-metric-toggle")!;
 const exportAnalogOverlayPngBtn = document.getElementById("export-analog-overlay-png-btn") as HTMLButtonElement;
 const exportSpeedIncreasePngBtn = document.getElementById("export-speed-increase-png-btn") as HTMLButtonElement;
+
+// Feature Radar & Direction Shift
+const featureRadarSection = document.getElementById("feature-radar-section")!;
+const featureRadarChartEl = document.getElementById("feature-radar-chart")!;
+const directionShiftChartEl = document.getElementById("direction-shift-chart")!;
+const exportFeatureRadarPngBtn = document.getElementById("export-feature-radar-png-btn") as HTMLButtonElement;
+const exportDirectionShiftPngBtn = document.getElementById("export-direction-shift-png-btn") as HTMLButtonElement;
+
+// Phase 6: Seasonal Heatmap & Distance Distribution
+const seasonalHeatmapSection = document.getElementById("seasonal-heatmap-section")!;
+const seasonalHeatmapChartEl = document.getElementById("seasonal-heatmap-chart")!;
+const heatmapColorToggle = document.getElementById("heatmap-color-toggle")!;
+const exportSeasonalHeatmapPngBtn = document.getElementById("export-seasonal-heatmap-png-btn") as HTMLButtonElement;
+const distanceDistributionSection = document.getElementById("distance-distribution-section")!;
+const distanceHistogramChartEl = document.getElementById("distance-histogram-chart")!;
+const exportDistanceHistogramPngBtn = document.getElementById("export-distance-histogram-png-btn") as HTMLButtonElement;
 
 // Wind rose
 const windroseSection = document.getElementById("windrose-section")!;
@@ -111,6 +133,8 @@ let currentTargetDate = "";
 let currentMode: "historical" | "forecast" = "historical";
 let currentAnalogHourly: AnalogHourlyResponse | null = null;
 let currentAnalogMetric: "tws" | "twd" = "tws";
+let currentHeatmapData: SeasonalHeatmapData | null = null;
+let currentHeatmapColorMode: "speed" | "classification" = "speed";
 
 // --- Init ---
 
@@ -308,12 +332,20 @@ historyList.addEventListener("click", async (e) => {
 
     renderBiasQualityPanel(locationId, analysisRun, weatherRecords);
 
+    const analogDates = analysisRun.analogs.map((a) => a.analog_date);
+
     getSeaBreezePanel(runId).then((panelData) => {
       renderSeaBreezeGauges(sbGaugesPanel, panelData);
       renderAnalogProbability(sbProbabilityPanel, panelData);
       seaBreezeSection.hidden = false;
       renderAnalogOverlayPanel(runId, panelData);
-    }).catch(() => { seaBreezeSection.hidden = true; analogOverlaySection.hidden = true; });
+    }).catch(() => { seaBreezeSection.hidden = true; analogOverlaySection.hidden = true; featureRadarSection.hidden = true; });
+
+    // Phase 6 panels (non-blocking)
+    renderPhase6Panels(runId, locationId, targetDate, analogDates).catch(() => {
+      seasonalHeatmapSection.hidden = true;
+      distanceDistributionSection.hidden = true;
+    });
   } catch (err) {
     showError(err instanceof Error ? err.message : "Failed to load run.");
   } finally {
@@ -393,7 +425,14 @@ analysisForm.addEventListener("submit", async (e) => {
       renderAnalogProbability(sbProbabilityPanel, panelData);
       seaBreezeSection.hidden = false;
       renderAnalogOverlayPanel(analysisRun.id, panelData);
-    }).catch(() => { seaBreezeSection.hidden = true; analogOverlaySection.hidden = true; });
+    }).catch(() => { seaBreezeSection.hidden = true; analogOverlaySection.hidden = true; featureRadarSection.hidden = true; });
+
+    // Phase 6 panels (non-blocking)
+    const analogDates = analysisRun.analogs.map((a) => a.analog_date);
+    renderPhase6Panels(analysisRun.id, locationId, targetDateInput.value, analogDates).catch(() => {
+      seasonalHeatmapSection.hidden = true;
+      distanceDistributionSection.hidden = true;
+    });
 
     // Refresh history to include this new run
     loadHistory();
@@ -491,8 +530,13 @@ async function renderAnalogOverlayPanel(
     renderAnalogOverlayChart(analogOverlayChartEl, data.target, data.analogs, "tws");
     renderWindSpeedIncreaseChart(speedIncreaseChartEl, panelData);
     analogOverlaySection.hidden = false;
+
+    renderFeatureRadarChart(featureRadarChartEl, panelData);
+    renderDirectionShiftChart(directionShiftChartEl, panelData);
+    featureRadarSection.hidden = false;
   } catch {
     analogOverlaySection.hidden = true;
+    featureRadarSection.hidden = true;
   }
 }
 
@@ -517,6 +561,73 @@ exportAnalogOverlayPngBtn.addEventListener("click", () => {
 
 exportSpeedIncreasePngBtn.addEventListener("click", () => {
   downloadSpeedIncreaseChart(currentTargetDate);
+});
+
+// Feature Radar & Direction Shift export buttons
+exportFeatureRadarPngBtn.addEventListener("click", () => {
+  downloadFeatureRadarChart(currentTargetDate);
+});
+
+exportDirectionShiftPngBtn.addEventListener("click", () => {
+  downloadDirectionShiftChart(currentTargetDate);
+});
+
+// --- Phase 6: Seasonal Heatmap & Distance Distribution ---
+
+async function renderPhase6Panels(
+  runId: number,
+  locationId: number,
+  targetDate: string,
+  analogDates: string[],
+): Promise<void> {
+  // Fetch both endpoints in parallel, non-blocking
+  const [heatmapResult, distResult] = await Promise.allSettled([
+    getSeasonalHeatmap(locationId, "era5", targetDate, analogDates),
+    getDistanceDistribution(runId),
+  ]);
+
+  if (heatmapResult.status === "fulfilled" && heatmapResult.value.days.length > 0) {
+    currentHeatmapData = heatmapResult.value;
+    currentHeatmapColorMode = "speed";
+    // Reset toggle
+    for (const btn of heatmapColorToggle.querySelectorAll<HTMLButtonElement>(".toggle-btn")) {
+      btn.classList.toggle("active", btn.dataset.mode === "speed");
+    }
+    renderSeasonalHeatmapChart(seasonalHeatmapChartEl, currentHeatmapData, "speed");
+    seasonalHeatmapSection.hidden = false;
+  } else {
+    seasonalHeatmapSection.hidden = true;
+  }
+
+  if (distResult.status === "fulfilled" && distResult.value.entries.length > 0) {
+    renderDistanceHistogramChart(distanceHistogramChartEl, distResult.value);
+    distanceDistributionSection.hidden = false;
+  } else {
+    distanceDistributionSection.hidden = true;
+  }
+}
+
+// Heatmap color toggle
+heatmapColorToggle.addEventListener("click", (e) => {
+  const btn = (e.target as HTMLElement).closest(".toggle-btn") as HTMLButtonElement | null;
+  if (!btn || !currentHeatmapData) return;
+  const mode = btn.dataset.mode as "speed" | "classification";
+  if (mode === currentHeatmapColorMode) return;
+
+  currentHeatmapColorMode = mode;
+  for (const b of heatmapColorToggle.querySelectorAll<HTMLButtonElement>(".toggle-btn")) {
+    b.classList.toggle("active", b.dataset.mode === mode);
+  }
+  renderSeasonalHeatmapChart(seasonalHeatmapChartEl, currentHeatmapData, mode);
+});
+
+// Phase 6 export buttons
+exportSeasonalHeatmapPngBtn.addEventListener("click", () => {
+  downloadSeasonalHeatmapChart(currentTargetDate);
+});
+
+exportDistanceHistogramPngBtn.addEventListener("click", () => {
+  downloadDistanceHistogramChart(currentTargetDate);
 });
 
 // --- Legacy classification ---

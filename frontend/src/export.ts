@@ -6,6 +6,10 @@ import {
   getBiasChart,
   getAnalogOverlayChart,
   getSpeedIncreaseChart,
+  getFeatureRadarChart,
+  getDirectionShiftChart,
+  getSeasonalHeatmapChart,
+  getDistanceHistogramChart,
 } from "./charts";
 
 function triggerDownload(url: string, filename: string): void {
@@ -85,4 +89,32 @@ export function downloadSpeedIncreaseChart(targetDate: string): void {
   if (!chart) return;
   const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
   triggerDownload(url, `speed_increase_${targetDate}.png`);
+}
+
+export function downloadFeatureRadarChart(targetDate: string): void {
+  const chart = getFeatureRadarChart();
+  if (!chart) return;
+  const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
+  triggerDownload(url, `feature_radar_${targetDate}.png`);
+}
+
+export function downloadDirectionShiftChart(targetDate: string): void {
+  const chart = getDirectionShiftChart();
+  if (!chart) return;
+  const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
+  triggerDownload(url, `direction_shift_${targetDate}.png`);
+}
+
+export function downloadSeasonalHeatmapChart(targetDate: string): void {
+  const chart = getSeasonalHeatmapChart();
+  if (!chart) return;
+  const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
+  triggerDownload(url, `seasonal_heatmap_${targetDate}.png`);
+}
+
+export function downloadDistanceHistogramChart(targetDate: string): void {
+  const chart = getDistanceHistogramChart();
+  if (!chart) return;
+  const url = chart.getDataURL({ type: "png", pixelRatio: 2, backgroundColor: "#fff" });
+  triggerDownload(url, `distance_histogram_${targetDate}.png`);
 }

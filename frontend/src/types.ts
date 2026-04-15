@@ -181,3 +181,31 @@ export interface BiasCorrection {
   calibration_end: string;
   sample_count: number;
 }
+
+export interface LibraryDaySummary {
+  date: string;
+  wind_speed_increase: number | null;
+  classification: "low" | "medium" | "high";
+}
+
+export interface SeasonalHeatmapData {
+  location_id: number;
+  days: LibraryDaySummary[];
+  target_date: string | null;
+  analog_dates: string[];
+}
+
+export interface DistanceEntry {
+  date: string;
+  distance: number;
+  similarity_score: number;
+  is_top_n: boolean;
+  rank: number | null;
+}
+
+export interface DistanceDistributionData {
+  run_id: number;
+  target_date: string;
+  entries: DistanceEntry[];
+  top_n_dates: string[];
+}

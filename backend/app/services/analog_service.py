@@ -177,6 +177,37 @@ def rank_analogs(
     return candidates
 
 
+def compute_all_distances(
+    target_features: DailyFeatures,
+    historical_features: list[DailyFeatures],
+) -> list[tuple[DailyFeatures, float]]:
+    """Return (features, distance) for ALL valid historical days.
+
+    Same pipeline as ``rank_analogs`` but returns the full list instead of top-N,
+    sorted by ascending distance.
+    """
+    valid: list[tuple[DailyFeatures, list[float]]] = []
+    for feat in historical_features:
+        if is_valid_for_analog(feat):
+            valid.append((feat, features_to_vector(feat)))
+
+    if not valid or not is_valid_for_analog(target_features):
+        return []
+
+    target_vec = np.array(features_to_vector(target_features), dtype=np.float64)
+    hist_matrix = np.array([v for _, v in valid], dtype=np.float64)
+
+    _, means, stds = standardize(hist_matrix)
+    distances = compute_distances(target_vec, hist_matrix, means, stds)
+
+    ranked_indices = np.argsort(distances)
+    result: list[tuple[DailyFeatures, float]] = []
+    for idx in ranked_indices:
+        feat, _ = valid[idx]
+        result.append((feat, float(distances[idx])))
+    return result
+
+
 def yearly_chunks(start: date, end: date) -> list[tuple[date, date]]:
     """Split a date range into per-calendar-year chunks.
 
