@@ -22,7 +22,7 @@ import {
   runAnalysis,
   triggerBatchValidation,
 } from "./api";
-import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart, disposeForecastChart, renderValidationTimeSeriesChart, renderValidationHistogramChart, renderValidationMonthlyChart, disposeValidationCharts, resizeChartById } from "./charts";
+import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart, disposeForecastChart, renderValidationTimeSeriesChart, renderValidationHistogramChart, renderValidationMonthlyChart, disposeValidationCharts, renderValDetailForecastChart, disposeValDetailChart, resizeChartById } from "./charts";
 import { TabController } from "./tabs";
 import { ExportMenu } from "./export-menu";
 import {
@@ -958,7 +958,16 @@ const valMonthlyChartEl = document.getElementById("val-monthly-chart")!;
 const valHistoryList = document.getElementById("val-history-list")!;
 const refreshValHistoryBtn = document.getElementById("refresh-val-history-btn") as HTMLButtonElement;
 
+const valPerDayTable = document.getElementById("val-per-day-table")!;
+const valDetailPanel = document.getElementById("val-detail-panel") as HTMLElement;
+const valDetailTitle = document.getElementById("val-detail-title")!;
+const valDetailClose = document.getElementById("val-detail-close") as HTMLButtonElement;
+const valDetailMetrics = document.getElementById("val-detail-metrics")!;
+const valDetailChartEl = document.getElementById("val-detail-chart")!;
+const valDetailAnalogTable = document.getElementById("val-detail-analog-table")!;
+
 let currentValRunId: number | null = null;
+let currentValResult: ValidationRunResult | null = null;
 let valPollTimer: ReturnType<typeof setInterval> | null = null;
 
 async function loadValHistory() {
@@ -994,7 +1003,141 @@ async function loadValHistory() {
   }
 }
 
+function renderValPerDayTable(
+  table: HTMLElement,
+  perDayResults: Record<string, unknown>[],
+) {
+  const rows = perDayResults
+    .filter((r) => r.tws_mae != null)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+  if (rows.length === 0) {
+    table.innerHTML = `<thead><tr><th colspan="7">No per-day results</th></tr></thead>`;
+    return;
+  }
+
+  const header = `<thead><tr>
+    <th>Date</th>
+    <th>Gate</th>
+    <th>Actual</th>
+    <th class="num">TWS MAE</th>
+    <th class="num">TWD MAE</th>
+    <th class="num">Peak Error</th>
+    <th>Action</th>
+  </tr></thead>`;
+
+  const body = rows
+    .map((r) => {
+      const date = String(r.date);
+      const gate = r.gate_result ?? "—";
+      const actual = r.actual_classification ?? "—";
+      const twsMae = r.tws_mae != null ? Number(r.tws_mae).toFixed(2) : "—";
+      const twdMae = r.twd_circular_mae != null ? Number(r.twd_circular_mae).toFixed(1) : "—";
+      const peakErr = r.peak_speed_error != null ? Number(r.peak_speed_error).toFixed(2) : "—";
+      return `<tr>
+        <td>${date}</td>
+        <td>${gate}</td>
+        <td>${actual}</td>
+        <td class="num">${twsMae}</td>
+        <td class="num">${twdMae}</td>
+        <td class="num">${peakErr}</td>
+        <td><button class="btn-export" data-val-drill-date="${date}">View</button></td>
+      </tr>`;
+    })
+    .join("");
+
+  table.innerHTML = `${header}<tbody>${body}</tbody>`;
+
+  table.addEventListener("click", (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-val-drill-date]");
+    if (btn) {
+      const date = btn.dataset.valDrillDate;
+      if (date) drillDownToValDay(date);
+    }
+  });
+}
+
+async function drillDownToValDay(date: string) {
+  if (!currentValResult) return;
+
+  valDetailPanel.hidden = false;
+  valDetailTitle.textContent = `Validation Detail: ${date}`;
+
+  // Show per-day metrics from cached result
+  const dayEntry = currentValResult.per_day_results?.find(
+    (r) => String(r.date) === date,
+  );
+
+  if (dayEntry) {
+    const gate = String(dayEntry.gate_result ?? "—");
+    const actual = String(dayEntry.actual_classification ?? "—");
+    const twsMae = dayEntry.tws_mae != null ? Number(dayEntry.tws_mae).toFixed(2) + " m/s" : "—";
+    const peakErr = dayEntry.peak_speed_error != null ? Number(dayEntry.peak_speed_error).toFixed(2) + " m/s" : "—";
+    const onsetErr = dayEntry.onset_error_hours != null ? Number(dayEntry.onset_error_hours).toFixed(1) + " h" : "—";
+    valDetailMetrics.innerHTML = `
+      <div class="metric-box"><div class="metric-label">Gate Result</div><div class="metric-value">${gate}</div></div>
+      <div class="metric-box"><div class="metric-label">Actual</div><div class="metric-value">${actual}</div></div>
+      <div class="metric-box"><div class="metric-label">TWS MAE</div><div class="metric-value">${twsMae}</div></div>
+      <div class="metric-box"><div class="metric-label">Peak Error</div><div class="metric-value">${peakErr}</div></div>
+      <div class="metric-box"><div class="metric-label">Onset Error</div><div class="metric-value">${onsetErr}</div></div>
+    `;
+  } else {
+    valDetailMetrics.innerHTML = "";
+  }
+
+  // Show loading state
+  valDetailChartEl.innerHTML = `<p style="text-align:center;color:#868e96;padding:2rem;">Loading analysis...</p>`;
+  valDetailAnalogTable.innerHTML = "";
+
+  valDetailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  try {
+    const request = {
+      location_id: currentValResult.location_id,
+      target_date: date,
+      historical_start_date: currentValResult.library_start_date ?? "",
+      historical_end_date: currentValResult.library_end_date ?? "",
+      top_n: currentValResult.top_n,
+      mode: "historical",
+      historical_source: currentValResult.historical_source ?? "era5",
+    };
+
+    const analysisRun = await runAnalysis(request);
+    const runId = analysisRun.id;
+
+    // Fetch forecast composite and ERA5 actual weather in parallel
+    const [composite, actualRecords] = await Promise.all([
+      getForecastComposite(runId),
+      getWeatherRecords(currentValResult.location_id, date, date, "era5"),
+    ]);
+
+    // Render the forecast chart with ERA5 overlay
+    valDetailChartEl.innerHTML = "";
+    renderValDetailForecastChart(valDetailChartEl, composite, actualRecords);
+
+    // Render analog table
+    if (analysisRun.analogs && analysisRun.analogs.length > 0) {
+      renderAnalogTable(valDetailAnalogTable, analysisRun.analogs);
+    } else {
+      valDetailAnalogTable.innerHTML = `<thead><tr><th>No analog days found</th></tr></thead>`;
+    }
+  } catch (err) {
+    valDetailChartEl.innerHTML = `<p style="text-align:center;color:#e03131;padding:2rem;">Failed to load analysis: ${err instanceof Error ? err.message : "Unknown error"}</p>`;
+  }
+}
+
+valDetailClose.onclick = () => {
+  valDetailPanel.hidden = true;
+  disposeValDetailChart();
+};
+
 function renderValResults(result: ValidationRunResult) {
+  currentValResult = result;
+
+  // Reset drill-down panel from previous run
+  valDetailPanel.hidden = true;
+  disposeValDetailChart();
+
   if (result.aggregate_metrics) {
     renderBatchClassificationMetrics(valClassificationGrid, result.aggregate_metrics);
     renderBatchContinuousMetrics(valContinuousGrid, result.aggregate_metrics);
@@ -1008,11 +1151,13 @@ function renderValResults(result: ValidationRunResult) {
   // Unhide before chart init so ECharts can measure container dimensions
   valResults.hidden = false;
   if (result.per_day_results && result.per_day_results.length > 0) {
-    renderValidationTimeSeriesChart(valTimeseriesChartEl, result.per_day_results);
+    renderValidationTimeSeriesChart(valTimeseriesChartEl, result.per_day_results, drillDownToValDay);
     renderValidationHistogramChart(valHistogramChartEl, result.per_day_results);
     renderValidationMonthlyChart(valMonthlyChartEl, result.per_day_results);
+    renderValPerDayTable(valPerDayTable, result.per_day_results);
   } else {
     disposeValidationCharts();
+    valPerDayTable.innerHTML = "";
   }
 }
 

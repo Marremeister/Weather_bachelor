@@ -54,6 +54,7 @@ let forecastChart: ECharts | null = null;
 let valTimeseriesChart: ECharts | null = null;
 let valHistogramChart: ECharts | null = null;
 let valMonthlyChart: ECharts | null = null;
+let valDetailChart: ECharts | null = null;
 
 export function renderWindOverlayChart(
   container: HTMLElement,
@@ -1675,6 +1676,7 @@ function maeColor(mae: number): string {
 export function renderValidationTimeSeriesChart(
   container: HTMLElement,
   perDayResults: Record<string, unknown>[],
+  onDayClick?: (date: string) => void,
 ): void {
   if (valTimeseriesChart) valTimeseriesChart.dispose();
 
@@ -1765,6 +1767,15 @@ export function renderValidationTimeSeriesChart(
       },
     ],
   });
+
+  if (onDayClick) {
+    valTimeseriesChart.on("click", (params) => {
+      if (params.seriesType === "scatter" && params.value) {
+        const val = params.value as (string | number)[];
+        onDayClick(String(val[0]));
+      }
+    });
+  }
 }
 
 export function getValTimeseriesChart(): ECharts | null {
@@ -1969,6 +1980,168 @@ export function disposeValidationCharts(): void {
   if (valMonthlyChart) { valMonthlyChart.dispose(); valMonthlyChart = null; }
 }
 
+export function renderValDetailForecastChart(
+  container: HTMLElement,
+  data: ForecastCompositeData,
+  actualRecords?: WeatherRecord[],
+): void {
+  if (valDetailChart) valDetailChart.dispose();
+  if (!data.hours || data.hours.length === 0) return;
+
+  valDetailChart = init(container);
+
+  const hours = data.hours;
+  const xLabels = hours.map((h) => `${String(h.hour_local).padStart(2, "0")}:00`);
+
+  const medianData = hours.map((h) => h.median_tws);
+  const p25Data = hours.map((h) => h.p25_tws);
+  const p10Data = hours.map((h) => h.p10_tws);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const series: any[] = [
+    {
+      name: "P10",
+      type: "line",
+      data: p10Data,
+      lineStyle: { opacity: 0 },
+      itemStyle: { opacity: 0 },
+      stack: "band90",
+      symbol: "none",
+      z: 1,
+    },
+    {
+      name: "P10-P90",
+      type: "line",
+      data: hours.map((h) =>
+        h.p90_tws != null && h.p10_tws != null ? h.p90_tws - h.p10_tws : null,
+      ),
+      lineStyle: { opacity: 0 },
+      itemStyle: { opacity: 0 },
+      areaStyle: { color: "rgba(34,139,230,0.10)" },
+      stack: "band90",
+      symbol: "none",
+      z: 1,
+    },
+    {
+      name: "P25",
+      type: "line",
+      data: p25Data,
+      lineStyle: { opacity: 0 },
+      itemStyle: { opacity: 0 },
+      stack: "band75",
+      symbol: "none",
+      z: 2,
+    },
+    {
+      name: "P25-P75 (IQR)",
+      type: "line",
+      data: hours.map((h) =>
+        h.p75_tws != null && h.p25_tws != null ? h.p75_tws - h.p25_tws : null,
+      ),
+      lineStyle: { opacity: 0 },
+      itemStyle: { opacity: 0 },
+      areaStyle: { color: "rgba(34,139,230,0.22)" },
+      stack: "band75",
+      symbol: "none",
+      z: 2,
+    },
+    {
+      name: "Median TWS",
+      type: "line",
+      data: medianData,
+      smooth: true,
+      symbol: "circle",
+      symbolSize: 6,
+      lineStyle: { color: "#228be6", width: 3 },
+      itemStyle: { color: "#228be6" },
+      z: 5,
+    },
+  ];
+
+  const legendData = ["Median TWS", "P25-P75 (IQR)"];
+
+  if (actualRecords && actualRecords.length > 0) {
+    const recsByHour = new Map<number, WeatherRecord>();
+    for (const rec of actualRecords) {
+      const h = new Date(rec.valid_time_local).getHours();
+      if (!recsByHour.has(h)) recsByHour.set(h, rec);
+    }
+
+    const actualTwsData = xLabels.map((_, hi) => {
+      const targetHour = hours[hi].hour_local;
+      const rec = recsByHour.get(targetHour);
+      return rec?.true_wind_speed ?? null;
+    });
+
+    series.push({
+      name: "Actual ERA5 TWS",
+      type: "line",
+      data: actualTwsData,
+      smooth: true,
+      symbol: "diamond",
+      symbolSize: 7,
+      lineStyle: { color: "#e03131", width: 2, type: "dashed" },
+      itemStyle: { color: "#e03131" },
+      z: 6,
+    });
+    legendData.push("Actual ERA5 TWS");
+  }
+
+  valDetailChart.setOption({
+    tooltip: {
+      trigger: "axis",
+      formatter(params: unknown) {
+        const items = params as Array<{
+          axisValueLabel: string;
+          seriesName: string;
+          value: number | null;
+        }>;
+        if (!items.length) return "";
+        const hourLabel = items[0].axisValueLabel;
+        const hi = xLabels.indexOf(hourLabel);
+        const h = hi >= 0 ? hours[hi] : null;
+        if (!h) return hourLabel;
+
+        let html = `<strong>${hourLabel}</strong>`;
+        html += `<br/>Median TWS: ${h.median_tws != null ? h.median_tws.toFixed(1) : "N/A"} m/s`;
+        html += `<br/>IQR: ${h.p25_tws != null ? h.p25_tws.toFixed(1) : "?"}\u2013${h.p75_tws != null ? h.p75_tws.toFixed(1) : "?"} m/s`;
+        html += `<br/>90% range: ${h.p10_tws != null ? h.p10_tws.toFixed(1) : "?"}\u2013${h.p90_tws != null ? h.p90_tws.toFixed(1) : "?"} m/s`;
+        // Show actual ERA5 value if present
+        if (actualRecords && actualRecords.length > 0 && h) {
+          const rec = new Map<number, WeatherRecord>();
+          for (const r of actualRecords) {
+            const hr = new Date(r.valid_time_local).getHours();
+            if (!rec.has(hr)) rec.set(hr, r);
+          }
+          const actual = rec.get(h.hour_local);
+          if (actual?.true_wind_speed != null) {
+            html += `<br/>Actual ERA5: ${actual.true_wind_speed.toFixed(1)} m/s`;
+          }
+        }
+        return html;
+      },
+    },
+    legend: { top: 0, left: "center", data: legendData },
+    grid: { left: 50, right: 30, top: 35, bottom: 50 },
+    xAxis: {
+      type: "category",
+      data: xLabels,
+      axisLabel: { fontSize: 12 },
+    },
+    yAxis: {
+      type: "value",
+      name: "m/s",
+      nameLocation: "middle",
+      nameGap: 35,
+    },
+    series,
+  });
+}
+
+export function disposeValDetailChart(): void {
+  if (valDetailChart) { valDetailChart.dispose(); valDetailChart = null; }
+}
+
 // Map container element IDs to their chart instance references
 const chartByContainerId: Record<string, () => ECharts | null> = {
   "wind-overlay-chart": () => windOverlayChart,
@@ -1986,6 +2159,7 @@ const chartByContainerId: Record<string, () => ECharts | null> = {
   "val-timeseries-chart": () => valTimeseriesChart,
   "val-histogram-chart": () => valHistogramChart,
   "val-monthly-chart": () => valMonthlyChart,
+  "val-detail-chart": () => valDetailChart,
 };
 
 export function resizeChartById(containerId: string): void {

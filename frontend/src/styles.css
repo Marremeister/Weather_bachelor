@@ -868,3 +868,11 @@ body {
     height: 240px;
   }
 }
+
+.val-detail-panel {
+  margin-top: 1.25rem;
+  padding: 1.25rem;
+  background: #f8f9fa;
+  border: 2px solid #228be6;
+  border-radius: 8px;
+}

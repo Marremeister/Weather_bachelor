@@ -352,6 +352,23 @@
               <div class="section-header"><h3>Monthly Accuracy</h3></div>
               <div id="val-monthly-chart" class="chart-container"></div>
             </div>
+            <div class="section-header" style="margin-top:1.25rem;">
+              <h3>Per-Day Results</h3>
+            </div>
+            <div class="table-scroll">
+              <table id="val-per-day-table" class="data-table"></table>
+            </div>
+            <div id="val-detail-panel" class="val-detail-panel" hidden>
+              <div class="section-header">
+                <h3 id="val-detail-title">Validation Detail</h3>
+                <button id="val-detail-close" class="btn-export">Close</button>
+              </div>
+              <div id="val-detail-metrics" class="summary-grid"></div>
+              <div id="val-detail-chart" class="chart-container" style="margin-top:1rem;"></div>
+              <div class="table-scroll" style="margin-top:1rem;">
+                <table id="val-detail-analog-table" class="data-table"></table>
+              </div>
+            </div>
           </div>
           <div id="val-history" style="margin-top:1.25rem;">
             <div class="section-header">
