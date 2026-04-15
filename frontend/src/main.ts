@@ -22,7 +22,7 @@ import {
   runAnalysis,
   triggerBatchValidation,
 } from "./api";
-import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart, disposeForecastChart } from "./charts";
+import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart, disposeForecastChart, renderValidationTimeSeriesChart, renderValidationHistogramChart, renderValidationMonthlyChart } from "./charts";
 import {
   renderSummaryPanel,
   renderHourlyTable,
@@ -914,6 +914,9 @@ const valContinuousGrid = document.getElementById("val-continuous-grid")!;
 const valGateTable = document.getElementById("val-gate-table")!;
 const valSourceTable = document.getElementById("val-source-table")!;
 const valExportCsvBtn = document.getElementById("val-export-csv-btn") as HTMLButtonElement;
+const valTimeseriesChartEl = document.getElementById("val-timeseries-chart")!;
+const valHistogramChartEl = document.getElementById("val-histogram-chart")!;
+const valMonthlyChartEl = document.getElementById("val-monthly-chart")!;
 const valHistoryList = document.getElementById("val-history-list")!;
 const refreshValHistoryBtn = document.getElementById("refresh-val-history-btn") as HTMLButtonElement;
 
@@ -963,6 +966,11 @@ function renderValResults(result: ValidationRunResult) {
   }
   if (result.source_stratification) {
     renderSourceStratificationTable(valSourceTable, result.source_stratification);
+  }
+  if (result.per_day_results && result.per_day_results.length > 0) {
+    renderValidationTimeSeriesChart(valTimeseriesChartEl, result.per_day_results);
+    renderValidationHistogramChart(valHistogramChartEl, result.per_day_results);
+    renderValidationMonthlyChart(valMonthlyChartEl, result.per_day_results);
   }
   valResults.hidden = false;
 }

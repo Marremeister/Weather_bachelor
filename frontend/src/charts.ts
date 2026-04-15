@@ -51,6 +51,9 @@ let directionShiftChart: ECharts | null = null;
 let seasonalHeatmapChart: ECharts | null = null;
 let distanceHistogramChart: ECharts | null = null;
 let forecastChart: ECharts | null = null;
+let valTimeseriesChart: ECharts | null = null;
+let valHistogramChart: ECharts | null = null;
+let valMonthlyChart: ECharts | null = null;
 
 export function renderWindOverlayChart(
   container: HTMLElement,
@@ -1661,6 +1664,305 @@ export function disposeForecastChart(): void {
   }
 }
 
+// --- Validation Charts ---
+
+function maeColor(mae: number): string {
+  if (mae <= 1.5) return "#40c057";
+  if (mae <= 2.5) return "#fd7e14";
+  return "#e03131";
+}
+
+export function renderValidationTimeSeriesChart(
+  container: HTMLElement,
+  perDayResults: Record<string, unknown>[],
+): void {
+  if (valTimeseriesChart) valTimeseriesChart.dispose();
+
+  const rows = perDayResults
+    .filter((r) => r.tws_mae != null)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+  if (rows.length === 0) return;
+
+  valTimeseriesChart = init(container);
+
+  const dates = rows.map((r) => String(r.date));
+  const maes = rows.map((r) => Number(r.tws_mae));
+
+  // scatter points colored by threshold
+  const scatterData = maes.map((v, i) => ({
+    value: [dates[i], v],
+    itemStyle: { color: maeColor(v) },
+  }));
+
+  // 7-day rolling average
+  const rollingAvg: (number | null)[] = [];
+  for (let i = 0; i < maes.length; i++) {
+    if (i < 6) {
+      rollingAvg.push(null);
+    } else {
+      let sum = 0;
+      for (let j = i - 6; j <= i; j++) sum += maes[j];
+      rollingAvg.push(sum / 7);
+    }
+  }
+
+  const overallMean = maes.reduce((s, v) => s + v, 0) / maes.length;
+
+  valTimeseriesChart.setOption({
+    tooltip: {
+      trigger: "axis",
+      formatter(params: unknown) {
+        const items = params as Array<{ seriesName: string; value: [string, number]; marker: string }>;
+        if (!items.length) return "";
+        let html = `${items[0].value[0]}<br/>`;
+        for (const it of items) {
+          if (it.value[1] != null) {
+            html += `${it.marker} ${it.seriesName}: ${Number(it.value[1]).toFixed(2)} m/s<br/>`;
+          }
+        }
+        return html;
+      },
+    },
+    grid: { left: 60, right: 30, top: 30, bottom: 60 },
+    xAxis: {
+      type: "category",
+      data: dates,
+      axisLabel: { rotate: 45, fontSize: 10 },
+    },
+    yAxis: {
+      type: "value",
+      name: "TWS MAE (m/s)",
+      nameLocation: "middle",
+      nameGap: 40,
+    },
+    series: [
+      {
+        name: "MAE",
+        type: "scatter",
+        data: scatterData,
+        symbolSize: 6,
+      },
+      {
+        name: "7-day Avg",
+        type: "line",
+        data: rollingAvg.map((v, i) => [dates[i], v]),
+        smooth: true,
+        symbol: "none",
+        lineStyle: { color: "#228be6", width: 2 },
+        itemStyle: { color: "#228be6" },
+        markLine: {
+          silent: true,
+          symbol: "none",
+          data: [
+            {
+              yAxis: overallMean,
+              label: { formatter: `Mean: ${overallMean.toFixed(2)}`, position: "insideEndTop", fontSize: 10 },
+              lineStyle: { color: "#868e96", type: "dashed" as const, width: 1 },
+            },
+          ],
+        },
+      },
+    ],
+  });
+}
+
+export function getValTimeseriesChart(): ECharts | null {
+  return valTimeseriesChart;
+}
+
+export function renderValidationHistogramChart(
+  container: HTMLElement,
+  perDayResults: Record<string, unknown>[],
+): void {
+  if (valHistogramChart) valHistogramChart.dispose();
+
+  const maes = perDayResults
+    .filter((r) => r.tws_mae != null)
+    .map((r) => Number(r.tws_mae));
+
+  if (maes.length === 0) return;
+
+  valHistogramChart = init(container);
+
+  const maeMin = Math.min(...maes);
+  const maeMax = Math.max(...maes);
+  const binCount = Math.min(40, Math.max(10, Math.ceil(Math.sqrt(maes.length))));
+  const binWidth = (maeMax - maeMin) / binCount || 1;
+
+  interface Bin { start: number; end: number; count: number; }
+  const bins: Bin[] = [];
+  for (let i = 0; i < binCount; i++) {
+    bins.push({ start: maeMin + i * binWidth, end: maeMin + (i + 1) * binWidth, count: 0 });
+  }
+
+  for (const v of maes) {
+    let idx = Math.floor((v - maeMin) / binWidth);
+    if (idx >= binCount) idx = binCount - 1;
+    if (idx < 0) idx = 0;
+    bins[idx].count++;
+  }
+
+  const labels = bins.map((b) => b.start.toFixed(1));
+  const barData = bins.map((b) => {
+    const mid = (b.start + b.end) / 2;
+    return {
+      value: b.count,
+      itemStyle: { color: maeColor(mid) },
+    };
+  });
+
+  const mean = maes.reduce((s, v) => s + v, 0) / maes.length;
+  const sorted = [...maes].sort((a, b) => a - b);
+  const median = sorted.length % 2 === 0
+    ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+    : sorted[Math.floor(sorted.length / 2)];
+
+  // Resolve mean/median to bin category labels
+  const meanBinIdx = Math.min(Math.floor((mean - maeMin) / binWidth), binCount - 1);
+  const medianBinIdx = Math.min(Math.floor((median - maeMin) / binWidth), binCount - 1);
+
+  valHistogramChart.setOption({
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter(params: unknown) {
+        const items = params as Array<{ axisValueLabel: string; value: number }>;
+        if (!items.length) return "";
+        const item = items[0];
+        const binIdx = labels.indexOf(item.axisValueLabel);
+        const bin = binIdx >= 0 ? bins[binIdx] : null;
+        const pct = ((item.value / maes.length) * 100).toFixed(1);
+        let html = `MAE: ${item.axisValueLabel}–${bin ? bin.end.toFixed(1) : "?"} m/s<br/>`;
+        html += `Count: ${item.value} (${pct}%)`;
+        return html;
+      },
+    },
+    grid: { left: 60, right: 30, top: 40, bottom: 60 },
+    xAxis: {
+      type: "category",
+      data: labels,
+      name: "TWS MAE (m/s)",
+      nameLocation: "middle",
+      nameGap: 35,
+      axisLabel: { rotate: 45, fontSize: 10 },
+    },
+    yAxis: {
+      type: "value",
+      name: "Count",
+      nameLocation: "middle",
+      nameGap: 40,
+    },
+    series: [
+      {
+        type: "bar",
+        data: barData,
+        barWidth: "90%",
+        markLine: {
+          silent: true,
+          symbol: "none",
+          data: [
+            {
+              xAxis: labels[meanBinIdx],
+              label: { formatter: `Mean: ${mean.toFixed(2)}`, fontSize: 10, position: "end" as const },
+              lineStyle: { color: "#228be6", type: "dashed" as const, width: 1 },
+            },
+            {
+              xAxis: labels[medianBinIdx],
+              label: { formatter: `Median: ${median.toFixed(2)}`, fontSize: 10, position: "end" as const },
+              lineStyle: { color: "#be4bdb", type: "dashed" as const, width: 1 },
+            },
+          ],
+        },
+      },
+    ],
+  });
+}
+
+export function getValHistogramChart(): ECharts | null {
+  return valHistogramChart;
+}
+
+export function renderValidationMonthlyChart(
+  container: HTMLElement,
+  perDayResults: Record<string, unknown>[],
+): void {
+  if (valMonthlyChart) valMonthlyChart.dispose();
+
+  const rows = perDayResults.filter((r) => r.tws_mae != null && r.date != null);
+  if (rows.length === 0) return;
+
+  valMonthlyChart = init(container);
+
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  // Group by year+month
+  const grouped: Record<string, { sum: number; count: number }> = {};
+  const yearsSet = new Set<number>();
+  const monthsSet = new Set<number>();
+
+  for (const r of rows) {
+    const d = new Date(String(r.date));
+    const year = d.getFullYear();
+    const month = d.getMonth();
+    const key = `${year}-${month}`;
+    yearsSet.add(year);
+    monthsSet.add(month);
+    if (!grouped[key]) grouped[key] = { sum: 0, count: 0 };
+    grouped[key].sum += Number(r.tws_mae);
+    grouped[key].count++;
+  }
+
+  const years = [...yearsSet].sort();
+  const months = [...monthsSet].sort();
+  const monthLabels = months.map((m) => monthNames[m]);
+
+  const yearColors = ["#228be6", "#40c057", "#fd7e14", "#e03131", "#be4bdb", "#fab005", "#15aabf", "#868e96"];
+
+  const series = years.map((year, yi) => ({
+    name: String(year),
+    type: "bar" as const,
+    data: months.map((month) => {
+      const g = grouped[`${year}-${month}`];
+      return g ? Math.round((g.sum / g.count) * 100) / 100 : null;
+    }),
+    itemStyle: { color: yearColors[yi % yearColors.length] },
+    label: {
+      show: true,
+      position: "top" as const,
+      fontSize: 9,
+      formatter: (p: { value: number | null }) => (p.value != null ? p.value.toFixed(1) : ""),
+    },
+  }));
+
+  valMonthlyChart.setOption({
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+    },
+    legend: {
+      data: years.map(String),
+      top: 0,
+    },
+    grid: { left: 60, right: 30, top: 40, bottom: 40 },
+    xAxis: {
+      type: "category",
+      data: monthLabels,
+    },
+    yAxis: {
+      type: "value",
+      name: "Mean TWS MAE (m/s)",
+      nameLocation: "middle",
+      nameGap: 40,
+    },
+    series,
+  });
+}
+
+export function getValMonthlyChart(): ECharts | null {
+  return valMonthlyChart;
+}
+
 function handleResize() {
   windOverlayChart?.resize();
   tempPressureChart?.resize();
@@ -1675,6 +1977,9 @@ function handleResize() {
   seasonalHeatmapChart?.resize();
   distanceHistogramChart?.resize();
   forecastChart?.resize();
+  valTimeseriesChart?.resize();
+  valHistogramChart?.resize();
+  valMonthlyChart?.resize();
 }
 
 window.addEventListener("resize", handleResize);

@@ -319,6 +319,20 @@
           <div class="table-scroll">
             <table id="val-source-table" class="data-table"></table>
           </div>
+          <section class="charts-row" style="margin-top:1.25rem;">
+            <div class="card chart-card">
+              <div class="section-header"><h3>Daily Forecast Error</h3></div>
+              <div id="val-timeseries-chart" class="chart-container"></div>
+            </div>
+            <div class="card chart-card">
+              <div class="section-header"><h3>Error Distribution</h3></div>
+              <div id="val-histogram-chart" class="chart-container"></div>
+            </div>
+          </section>
+          <div class="card" style="margin-top:1.25rem;">
+            <div class="section-header"><h3>Monthly Accuracy</h3></div>
+            <div id="val-monthly-chart" class="chart-container"></div>
+          </div>
           <div style="margin-top:1rem;">
             <button id="val-export-csv-btn" class="btn-export">Export Per-Day CSV</button>
           </div>
