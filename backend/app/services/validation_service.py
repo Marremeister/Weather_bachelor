@@ -340,83 +340,86 @@ def _compute_climatology_baseline(
     For each test day, the climatology forecast is the hour-by-hour median TWS
     of all same-month library days (excluding the buffer zone).
     Returns the overall climatological MAE across all test days, or None.
-    """
-    all_lib_dates = [f.date for f in all_library_features]
-    clim_errors: list[float] = []
 
+    Uses a single bulk query to load all afternoon records, then groups
+    in-memory — avoids thousands of individual DB round-trips.
+    """
+    # Collect test days that produced forecasts
+    test_days_with_forecast = []
     for result in per_day_results:
         if result.get("tws_mae") is None:
-            continue  # Skip days without forecast errors
+            continue
+        test_days_with_forecast.append(date.fromisoformat(result["date"]))
 
-        test_date = date.fromisoformat(result["date"])
+    if not test_days_with_forecast:
+        return None
+
+    all_lib_dates = [f.date for f in all_library_features]
+
+    # Collect ALL dates we need afternoon records for (library + test days)
+    all_needed_dates = set(all_lib_dates) | set(test_days_with_forecast)
+
+    # Single bulk query: load afternoon records (11:00-16:59) for all needed dates
+    min_dt = datetime.combine(min(all_needed_dates), time(11, 0))
+    max_dt = datetime.combine(max(all_needed_dates), time(16, 59, 59))
+    all_recs = (
+        db.execute(
+            select(WeatherRecord)
+            .where(
+                WeatherRecord.location_id == location_id,
+                WeatherRecord.source == hist_source,
+                WeatherRecord.valid_time_local >= min_dt,
+                WeatherRecord.valid_time_local <= max_dt,
+            )
+            .order_by(WeatherRecord.valid_time_local)
+        )
+        .scalars()
+        .all()
+    )
+
+    # Index records by (date, hour) for fast lookup
+    date_hour_tws: dict[tuple[date, int], float] = {}
+    for rec in all_recs:
+        h = rec.valid_time_local.hour
+        if h in FORECAST_HOURS and rec.true_wind_speed is not None:
+            d = rec.valid_time_local.date()
+            date_hour_tws[(d, h)] = rec.true_wind_speed
+
+    # Pre-group library features by month
+    lib_by_month: dict[int, list[DailyFeatures]] = defaultdict(list)
+    for f in all_library_features:
+        lib_by_month[f.date.month].append(f)
+
+    clim_errors: list[float] = []
+
+    for test_date in test_days_with_forecast:
         exclusion = _build_exclusion_set(test_date, buffer_days, all_lib_dates)
 
-        # Find same-month library days not in exclusion set
         same_month_features = [
-            f for f in all_library_features
-            if f.date.month == test_date.month and f.date not in exclusion
+            f for f in lib_by_month[test_date.month]
+            if f.date not in exclusion
         ]
-
         if not same_month_features:
             continue
 
-        # Load hourly data for same-month days and build climatological composite
+        # Build climatological median per hour from pre-loaded data
         clim_hourly: dict[int, list[float]] = defaultdict(list)
         for feat in same_month_features:
-            a_start = datetime.combine(feat.date, time(11, 0))
-            a_end = datetime.combine(feat.date, time(16, 59, 59))
-            recs = (
-                db.execute(
-                    select(WeatherRecord)
-                    .where(
-                        WeatherRecord.location_id == location_id,
-                        WeatherRecord.source == hist_source,
-                        WeatherRecord.valid_time_local >= a_start,
-                        WeatherRecord.valid_time_local <= a_end,
-                    )
-                    .order_by(WeatherRecord.valid_time_local)
-                )
-                .scalars()
-                .all()
-            )
-            for rec in recs:
-                h = rec.valid_time_local.hour
-                if h in FORECAST_HOURS and rec.true_wind_speed is not None:
-                    clim_hourly[h].append(rec.true_wind_speed)
+            for h in FORECAST_HOURS:
+                tws = date_hour_tws.get((feat.date, h))
+                if tws is not None:
+                    clim_hourly[h].append(tws)
 
-        # Compute climatological median per hour
         clim_median: dict[int, float] = {}
         for h, speeds in clim_hourly.items():
             if speeds:
                 clim_median[h] = float(np.median(speeds))
 
-        # Load actual test-day data
-        a_start = datetime.combine(test_date, time(11, 0))
-        a_end = datetime.combine(test_date, time(16, 59, 59))
-        actual_recs = (
-            db.execute(
-                select(WeatherRecord)
-                .where(
-                    WeatherRecord.location_id == location_id,
-                    WeatherRecord.source == hist_source,
-                    WeatherRecord.valid_time_local >= a_start,
-                    WeatherRecord.valid_time_local <= a_end,
-                )
-                .order_by(WeatherRecord.valid_time_local)
-            )
-            .scalars()
-            .all()
-        )
-        actual_hourly: dict[int, float] = {}
-        for rec in actual_recs:
-            h = rec.valid_time_local.hour
-            if h in FORECAST_HOURS and rec.true_wind_speed is not None:
-                actual_hourly[h] = rec.true_wind_speed
-
-        # Compute per-hour errors against climatology
+        # Compare against actual test-day data (also pre-loaded)
         for h in FORECAST_HOURS:
-            if h in clim_median and h in actual_hourly:
-                clim_errors.append(abs(clim_median[h] - actual_hourly[h]))
+            actual = date_hour_tws.get((test_date, h))
+            if h in clim_median and actual is not None:
+                clim_errors.append(abs(clim_median[h] - actual))
 
     if not clim_errors:
         return None
