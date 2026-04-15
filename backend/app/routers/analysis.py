@@ -514,13 +514,15 @@ def get_distance_distribution(
     if not target_records:
         raise HTTPException(status_code=404, detail="No target-day weather data found")
 
+    window = AnalysisWindow()
+
     target_features = compute_daily_features(
-        target_records, run.location_id, run.target_date,
+        target_records, run.location_id, run.target_date, window,
     )
 
     # Load full library
     hist_source = run.historical_source or "era5"
-    config_hash = compute_feature_config_hash(AnalysisWindow())
+    config_hash = compute_feature_config_hash(window)
     historical_features = get_precomputed_features(
         db, run.location_id, hist_source, config_hash,
         start_date=run.historical_start_date,
@@ -535,7 +537,7 @@ def get_distance_distribution(
             top_n_dates=top_n_dates,
         )
 
-    all_distances = compute_all_distances(target_features, historical_features)
+    all_distances = compute_all_distances(target_features, historical_features, window=window)
 
     entries: list[DistanceEntry] = []
     for feat, dist in all_distances:

@@ -37,6 +37,49 @@ _REQUIRED_FIELDS = (
     "onshore_fraction",
 )
 
+# Map each feature name to its group for weighting.
+_FIELD_GROUP: dict[str, str] = {
+    "morning_mean_wind_speed": "morning",
+    "morning_mean_wind_direction": "morning",
+    "reference_wind_speed": "reference",
+    "reference_wind_direction": "reference",
+    "afternoon_max_wind_speed": "afternoon",
+    "afternoon_mean_wind_direction": "afternoon",
+    "wind_speed_increase": "derived",
+    "wind_direction_shift": "derived",
+    "onshore_fraction": "derived",
+}
+
+
+def build_weight_vector(window: AnalysisWindow) -> np.ndarray:
+    """Build a 12-element weight vector matching ``features_to_vector()`` order.
+
+    Each feature group expands to 3 elements in the vector (directions are
+    decomposed into sin/cos pairs), giving::
+
+        [m, m, m, r, r, r, a, a, a, d, d, d]
+    """
+    group_weight = {
+        "morning": window.morning_weight,
+        "reference": window.reference_weight,
+        "afternoon": window.afternoon_weight,
+        "derived": window.derived_weight,
+    }
+    return np.array([
+        group_weight["morning"],   # morning_mean_wind_speed
+        group_weight["morning"],   # sin(morning_mean_wind_direction)
+        group_weight["morning"],   # cos(morning_mean_wind_direction)
+        group_weight["reference"], # reference_wind_speed
+        group_weight["reference"], # sin(reference_wind_direction)
+        group_weight["reference"], # cos(reference_wind_direction)
+        group_weight["afternoon"], # afternoon_max_wind_speed
+        group_weight["afternoon"], # sin(afternoon_mean_wind_direction)
+        group_weight["afternoon"], # cos(afternoon_mean_wind_direction)
+        group_weight["derived"],   # wind_speed_increase
+        group_weight["derived"],   # wind_direction_shift
+        group_weight["derived"],   # onshore_fraction
+    ], dtype=np.float64)
+
 
 # ---------------------------------------------------------------------------
 # Pure functions
@@ -88,9 +131,29 @@ def features_to_vector(features: DailyFeatures) -> list[float]:
     ]
 
 
-def is_valid_for_analog(features: DailyFeatures) -> bool:
-    """Return True if all 9 required fields are present and non-NaN."""
+def is_valid_for_analog(
+    features: DailyFeatures,
+    window: AnalysisWindow | None = None,
+) -> bool:
+    """Return True if all required fields (for groups with non-zero weight) are present.
+
+    Fields belonging to groups with weight 0 are not required, so days
+    missing afternoon or derived data can still be valid candidates when
+    those groups carry no weight.
+    """
+    if window is None:
+        window = AnalysisWindow()
+
+    group_weight = {
+        "morning": window.morning_weight,
+        "reference": window.reference_weight,
+        "afternoon": window.afternoon_weight,
+        "derived": window.derived_weight,
+    }
+
     for field_name in _REQUIRED_FIELDS:
+        if group_weight[_FIELD_GROUP[field_name]] == 0:
+            continue
         val = getattr(features, field_name, None)
         if val is None:
             return False
@@ -120,35 +183,47 @@ def compute_distances(
     historical: np.ndarray,
     means: np.ndarray,
     stds: np.ndarray,
+    weights: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Euclidean distance from *target* to each row in *historical*.
+    """Weighted Euclidean distance from *target* to each row in *historical*.
 
     Both are standardized using the provided *means* and *stds* (computed from
-    the historical sample).
+    the historical sample).  When *weights* is provided, each dimension of the
+    difference vector is scaled by ``sqrt(weight)`` before computing the norm,
+    implementing weighted Euclidean distance.
     """
     safe_stds = np.where(stds == 0, 1.0, stds)
     target_scaled = (target - means) / safe_stds
     hist_scaled = (historical - means) / safe_stds
-    return np.linalg.norm(hist_scaled - target_scaled, axis=1)
+    diff = hist_scaled - target_scaled
+    if weights is not None:
+        diff = diff * np.sqrt(weights)
+    return np.linalg.norm(diff, axis=1)
 
 
 def rank_analogs(
     target_features: DailyFeatures,
     historical_features: list[DailyFeatures],
     top_n: int = 10,
+    window: AnalysisWindow | None = None,
 ) -> list[AnalogCandidate]:
     """Full pure ranking pipeline: filter, vectorize, standardize, rank.
 
     Returns up to *top_n* :class:`AnalogCandidate` instances sorted by
     ascending distance (most similar first).
     """
+    if window is None:
+        window = AnalysisWindow()
+
+    weights = build_weight_vector(window)
+
     # Filter valid historical days
     valid: list[tuple[DailyFeatures, list[float]]] = []
     for feat in historical_features:
-        if is_valid_for_analog(feat):
+        if is_valid_for_analog(feat, window):
             valid.append((feat, features_to_vector(feat)))
 
-    if not valid or not is_valid_for_analog(target_features):
+    if not valid or not is_valid_for_analog(target_features, window):
         return []
 
     target_vec = np.array(features_to_vector(target_features), dtype=np.float64)
@@ -156,7 +231,7 @@ def rank_analogs(
 
     # Standardize using historical sample statistics
     _, means, stds = standardize(hist_matrix)
-    distances = compute_distances(target_vec, hist_matrix, means, stds)
+    distances = compute_distances(target_vec, hist_matrix, means, stds, weights=weights)
 
     # Sort by distance, take top_n
     ranked_indices = np.argsort(distances)[:top_n]
@@ -180,25 +255,31 @@ def rank_analogs(
 def compute_all_distances(
     target_features: DailyFeatures,
     historical_features: list[DailyFeatures],
+    window: AnalysisWindow | None = None,
 ) -> list[tuple[DailyFeatures, float]]:
     """Return (features, distance) for ALL valid historical days.
 
     Same pipeline as ``rank_analogs`` but returns the full list instead of top-N,
     sorted by ascending distance.
     """
+    if window is None:
+        window = AnalysisWindow()
+
+    weights = build_weight_vector(window)
+
     valid: list[tuple[DailyFeatures, list[float]]] = []
     for feat in historical_features:
-        if is_valid_for_analog(feat):
+        if is_valid_for_analog(feat, window):
             valid.append((feat, features_to_vector(feat)))
 
-    if not valid or not is_valid_for_analog(target_features):
+    if not valid or not is_valid_for_analog(target_features, window):
         return []
 
     target_vec = np.array(features_to_vector(target_features), dtype=np.float64)
     hist_matrix = np.array([v for _, v in valid], dtype=np.float64)
 
     _, means, stds = standardize(hist_matrix)
-    distances = compute_distances(target_vec, hist_matrix, means, stds)
+    distances = compute_distances(target_vec, hist_matrix, means, stds, weights=weights)
 
     ranked_indices = np.argsort(distances)
     result: list[tuple[DailyFeatures, float]] = []
@@ -440,7 +521,7 @@ def run_analog_analysis(
             return run
 
         # -- Rank analogs --
-        candidates = rank_analogs(target_features, historical_features, top_n)
+        candidates = rank_analogs(target_features, historical_features, top_n, window=window)
 
         if not candidates:
             run.status = "completed"

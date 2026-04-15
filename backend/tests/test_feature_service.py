@@ -28,6 +28,11 @@ def _rec(hour: int, speed: float | None, direction: float | None):
     )
 
 
+# Window with original 8-10 morning defaults, used by tests whose synthetic
+# data was written for the old default window.
+_OLD_WINDOW = AnalysisWindow(morning_start=8, morning_end=10, reference_hour=9)
+
+
 # ---------------------------------------------------------------------------
 # circular_mean
 # ---------------------------------------------------------------------------
@@ -124,7 +129,9 @@ class TestComputeDailyFeatures:
             _rec(15, 9.5, 220.0),
             _rec(16, 8.5, 215.0),
         ]
-        features = compute_daily_features(records, location_id=1, target_date=date(2024, 7, 15))
+        features = compute_daily_features(
+            records, location_id=1, target_date=date(2024, 7, 15), window=_OLD_WINDOW,
+        )
 
         assert features.location_id == 1
         assert features.date == date(2024, 7, 15)
@@ -176,7 +183,9 @@ class TestComputeDailyFeatures:
             _rec(15, 6.0, 200.0),
             _rec(16, 7.0, 220.0),
         ]
-        features = compute_daily_features(records, location_id=1, target_date=date(2024, 7, 15))
+        features = compute_daily_features(
+            records, location_id=1, target_date=date(2024, 7, 15), window=_OLD_WINDOW,
+        )
 
         # Morning: 2 speeds (4.0, 3.0), 2 dirs (90.0, 80.0) — meets min of 2
         assert features.morning_hours_used == 2
@@ -195,7 +204,9 @@ class TestComputeDailyFeatures:
             _rec(12, 8.0, 220.0),
             _rec(13, 9.0, 225.0),
         ]
-        features = compute_daily_features(records, location_id=1, target_date=date(2024, 7, 15))
+        features = compute_daily_features(
+            records, location_id=1, target_date=date(2024, 7, 15), window=_OLD_WINDOW,
+        )
 
         assert features.morning_hours_used == 1
         assert features.morning_mean_wind_speed is None
@@ -261,7 +272,9 @@ class TestComputeDailyFeatures:
             _rec(13, 7.0, 240.0),
             _rec(14, 7.0, 100.0),
         ]
-        features = compute_daily_features(records, location_id=1, target_date=date(2024, 7, 15))
+        features = compute_daily_features(
+            records, location_id=1, target_date=date(2024, 7, 15), window=_OLD_WINDOW,
+        )
 
         # 3 out of 4 afternoon directions in [180, 260]
         assert features.onshore_fraction is not None
@@ -277,7 +290,9 @@ class TestComputeDailyFeatures:
             _rec(12, 8.0, None),
             _rec(13, 9.0, None),
         ]
-        features = compute_daily_features(records, location_id=1, target_date=date(2024, 7, 15))
+        features = compute_daily_features(
+            records, location_id=1, target_date=date(2024, 7, 15), window=_OLD_WINDOW,
+        )
 
         # Speed features should still be computed
         assert features.morning_hours_used == 3

@@ -1,14 +1,14 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class AnalysisWindow(BaseModel):
     """Configurable time windows for sea-breeze feature extraction."""
 
-    morning_start: int = 8
-    morning_end: int = 10
+    morning_start: int = 9
+    morning_end: int = 11
     afternoon_start: int = 11
     afternoon_end: int = 16
     reference_hour: int = 9
@@ -16,6 +16,19 @@ class AnalysisWindow(BaseModel):
     onshore_sector_max: float = 260.0
     min_morning_hours: int = 2
     min_afternoon_hours: int = 3
+
+    # Per-group weights for analog distance computation
+    morning_weight: float = 1.0
+    reference_weight: float = 1.0
+    afternoon_weight: float = 0.0
+    derived_weight: float = 0.0
+
+    @field_validator("morning_weight", "reference_weight", "afternoon_weight", "derived_weight")
+    @classmethod
+    def weight_must_be_non_negative(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("weight must be >= 0")
+        return v
 
 
 class DailyFeatures(BaseModel):
