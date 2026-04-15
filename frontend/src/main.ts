@@ -1173,6 +1173,7 @@ async function loadValResults(runId: number) {
       valError.textContent = result.error_message || "Validation run failed.";
       valError.hidden = false;
       valProgress.hidden = true;
+      valResults.hidden = true;
     } else {
       // Still running, start polling
       startValPolling(runId);
@@ -1180,6 +1181,7 @@ async function loadValResults(runId: number) {
   } catch {
     valError.textContent = "Failed to load validation results.";
     valError.hidden = false;
+    valResults.hidden = true;
   }
 }
 
