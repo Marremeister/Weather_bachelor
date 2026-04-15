@@ -1902,9 +1902,9 @@ export function renderValidationMonthlyChart(
   const monthsSet = new Set<number>();
 
   for (const r of rows) {
-    const d = new Date(String(r.date));
-    const year = d.getFullYear();
-    const month = d.getMonth();
+    const parts = String(r.date).split("-");
+    const year = Number(parts[0]);
+    const month = Number(parts[1]) - 1; // 0-indexed to match monthNames
     const key = `${year}-${month}`;
     yearsSet.add(year);
     monthsSet.add(month);
@@ -1961,6 +1961,12 @@ export function renderValidationMonthlyChart(
 
 export function getValMonthlyChart(): ECharts | null {
   return valMonthlyChart;
+}
+
+export function disposeValidationCharts(): void {
+  if (valTimeseriesChart) { valTimeseriesChart.dispose(); valTimeseriesChart = null; }
+  if (valHistogramChart) { valHistogramChart.dispose(); valHistogramChart = null; }
+  if (valMonthlyChart) { valMonthlyChart.dispose(); valMonthlyChart = null; }
 }
 
 function handleResize() {

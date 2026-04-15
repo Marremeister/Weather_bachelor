@@ -22,7 +22,7 @@ import {
   runAnalysis,
   triggerBatchValidation,
 } from "./api";
-import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart, disposeForecastChart, renderValidationTimeSeriesChart, renderValidationHistogramChart, renderValidationMonthlyChart } from "./charts";
+import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart, disposeForecastChart, renderValidationTimeSeriesChart, renderValidationHistogramChart, renderValidationMonthlyChart, disposeValidationCharts } from "./charts";
 import {
   renderSummaryPanel,
   renderHourlyTable,
@@ -973,6 +973,8 @@ function renderValResults(result: ValidationRunResult) {
     renderValidationTimeSeriesChart(valTimeseriesChartEl, result.per_day_results);
     renderValidationHistogramChart(valHistogramChartEl, result.per_day_results);
     renderValidationMonthlyChart(valMonthlyChartEl, result.per_day_results);
+  } else {
+    disposeValidationCharts();
   }
 }
 
