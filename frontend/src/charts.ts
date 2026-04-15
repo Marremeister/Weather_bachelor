@@ -56,6 +56,7 @@ export function renderWindOverlayChart(
   container: HTMLElement,
   records: WeatherRecord[],
   source?: string,
+  observations?: ObservationRecord[],
 ): void {
   if (windOverlayChart) {
     windOverlayChart.dispose();
@@ -68,6 +69,69 @@ export function renderWindOverlayChart(
   });
   const speeds = records.map((r) => r.true_wind_speed);
   const directions = records.map((r) => r.true_wind_direction);
+
+  const series: Array<Record<string, unknown>> = [
+    {
+      name: "TWS",
+      type: "line",
+      yAxisIndex: 0,
+      data: speeds,
+      smooth: true,
+      symbol: "circle",
+      symbolSize: 4,
+      lineStyle: { color: "#228be6", width: 2 },
+      itemStyle: { color: "#228be6" },
+    },
+    {
+      name: "TWD",
+      type: "scatter",
+      yAxisIndex: 1,
+      data: directions,
+      symbolSize: 6,
+      itemStyle: { color: "#e67700" },
+    },
+  ];
+
+  // Optional observation overlay
+  if (observations && observations.length > 0) {
+    const obsByHour = new Map<number, ObservationRecord>();
+    for (const obs of observations) {
+      const h = new Date(obs.observation_time_local).getHours();
+      if (!obsByHour.has(h)) obsByHour.set(h, obs);
+    }
+
+    const obsTwsData = records.map((r) => {
+      const h = new Date(r.valid_time_local).getHours();
+      return obsByHour.get(h)?.wind_speed ?? null;
+    });
+    const obsTwdData = records.map((r) => {
+      const h = new Date(r.valid_time_local).getHours();
+      return obsByHour.get(h)?.wind_direction ?? null;
+    });
+
+    series.push({
+      name: "Observed TWS",
+      type: "line",
+      yAxisIndex: 0,
+      data: obsTwsData,
+      smooth: true,
+      symbol: "diamond",
+      symbolSize: 7,
+      lineStyle: { color: "#2b8a3e", width: 2 },
+      itemStyle: { color: "#2b8a3e" },
+      z: 6,
+    });
+    series.push({
+      name: "Observed TWD",
+      type: "scatter",
+      yAxisIndex: 1,
+      data: obsTwdData,
+      symbolSize: 7,
+      symbol: "diamond",
+      itemStyle: { color: "#2b8a3e" },
+      z: 6,
+    });
+  }
 
   windOverlayChart.setOption({
     title: source
@@ -92,9 +156,9 @@ export function renderWindOverlayChart(
         for (const item of items) {
           const val =
             item.value != null
-              ? item.seriesName === "TWS"
-                ? `${item.value.toFixed(1)} m/s`
-                : `${item.value}°`
+              ? item.seriesName.includes("TWD")
+                ? `${item.value}°`
+                : `${item.value.toFixed(1)} m/s`
               : "N/A";
           html += `<br/><span style="color:${item.color}">●</span> ${item.seriesName}: ${val}`;
         }
@@ -136,27 +200,7 @@ export function renderWindOverlayChart(
       },
     ],
     dataZoom: [{ type: "inside" }],
-    series: [
-      {
-        name: "TWS",
-        type: "line",
-        yAxisIndex: 0,
-        data: speeds,
-        smooth: true,
-        symbol: "circle",
-        symbolSize: 4,
-        lineStyle: { color: "#228be6", width: 2 },
-        itemStyle: { color: "#228be6" },
-      },
-      {
-        name: "TWD",
-        type: "scatter",
-        yAxisIndex: 1,
-        data: directions,
-        symbolSize: 6,
-        itemStyle: { color: "#e67700" },
-      },
-    ],
+    series,
   });
 }
 

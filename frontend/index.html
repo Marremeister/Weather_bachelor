@@ -183,7 +183,12 @@
         <div class="card chart-card">
           <div class="section-header">
             <h3>Wind Speed &amp; Direction</h3>
-            <button id="export-wind-png-btn" class="btn-export">Save PNG</button>
+            <div class="export-toolbar">
+              <select id="wind-station-select" style="font-size:0.85rem;padding:0.25rem 0.5rem;">
+                <option value="">Overlay station...</option>
+              </select>
+              <button id="export-wind-png-btn" class="btn-export">Save PNG</button>
+            </div>
           </div>
           <div id="wind-overlay-chart" class="chart-container"></div>
         </div>

@@ -66,6 +66,7 @@ const analysisError = document.getElementById("analysis-error")!;
 const summarySection = document.getElementById("summary-section")!;
 const summaryPanel = document.getElementById("summary-panel")!;
 const chartsSection = document.getElementById("charts-section")!;
+const windStationSelect = document.getElementById("wind-station-select") as HTMLSelectElement;
 const windOverlayEl = document.getElementById("wind-overlay-chart")!;
 const tempPressureEl = document.getElementById("temp-pressure-chart")!;
 const hourlySection = document.getElementById("hourly-section")!;
@@ -157,6 +158,8 @@ let currentTargetDate = "";
 let currentMode: "historical" | "forecast" = "historical";
 let currentStations: WeatherStation[] = [];
 let currentObservations: ObservationRecord[] = [];
+let currentWeatherRecords: WeatherRecord[] = [];
+let currentChartSource: string | undefined;
 let currentAnalogHourly: AnalogHourlyResponse | null = null;
 let currentAnalogMetric: "tws" | "twd" = "tws";
 let currentHeatmapData: SeasonalHeatmapData | null = null;
@@ -241,11 +244,11 @@ async function initStations() {
   try {
     currentStations = await fetchStations();
     if (currentStations.length > 0) {
-      stationSelect.innerHTML =
-        `<option value="">Select station...</option>` +
-        currentStations
-          .map((s) => `<option value="${s.id}">${s.station_code} — ${s.name}</option>`)
-          .join("");
+      const options = currentStations
+        .map((s) => `<option value="${s.id}">${s.station_code} — ${s.name}</option>`)
+        .join("");
+      stationSelect.innerHTML = `<option value="">Select station...</option>` + options;
+      windStationSelect.innerHTML = `<option value="">Overlay station...</option>` + options;
     }
   } catch {
     // Stations are optional; don't block boot
@@ -285,6 +288,29 @@ async function loadObservationOverlay() {
 
 stationSelect.addEventListener("change", () => {
   loadObservationOverlay();
+});
+
+async function loadWindObservationOverlay() {
+  const stationId = Number(windStationSelect.value);
+  if (!stationId || !currentTargetDate || currentWeatherRecords.length === 0) {
+    // Re-render without observations
+    if (currentWeatherRecords.length > 0) {
+      renderWindOverlayChart(windOverlayEl, currentWeatherRecords, currentChartSource);
+    }
+    return;
+  }
+
+  try {
+    await fetchObservations(stationId, currentTargetDate, currentTargetDate);
+    const obs = await getObservations(stationId, currentTargetDate, currentTargetDate);
+    renderWindOverlayChart(windOverlayEl, currentWeatherRecords, currentChartSource, obs);
+  } catch {
+    renderWindOverlayChart(windOverlayEl, currentWeatherRecords, currentChartSource);
+  }
+}
+
+windStationSelect.addEventListener("change", () => {
+  loadWindObservationOverlay();
 });
 
 function setDefaultDates() {
@@ -394,6 +420,8 @@ historyList.addEventListener("click", async (e) => {
     summarySection.hidden = false;
 
     const histSource = chartSource ?? weatherRecords[0]?.source;
+    currentWeatherRecords = weatherRecords;
+    currentChartSource = histSource;
     if (weatherRecords.length > 0) {
       chartsSection.hidden = false;
       renderWindOverlayChart(windOverlayEl, weatherRecords, histSource);
@@ -401,6 +429,8 @@ historyList.addEventListener("click", async (e) => {
 
       windroseSection.hidden = false;
       renderDualWindRose(morningWindroseEl, afternoonWindroseEl, weatherRecords, histSource);
+
+      if (windStationSelect.value) loadWindObservationOverlay();
     }
 
     renderHourlyTable(hourlyTable, weatherRecords);
@@ -482,6 +512,8 @@ analysisForm.addEventListener("submit", async (e) => {
 
     // Charts
     const source = chartSource ?? weatherRecords[0]?.source;
+    currentWeatherRecords = weatherRecords;
+    currentChartSource = source;
     if (weatherRecords.length > 0) {
       chartsSection.hidden = false;
       renderWindOverlayChart(windOverlayEl, weatherRecords, source);
@@ -489,6 +521,8 @@ analysisForm.addEventListener("submit", async (e) => {
 
       windroseSection.hidden = false;
       renderDualWindRose(morningWindroseEl, afternoonWindroseEl, weatherRecords, source);
+
+      if (windStationSelect.value) loadWindObservationOverlay();
     }
 
     // Hourly table
