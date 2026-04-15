@@ -129,7 +129,7 @@ def generate_forecast_composite(db: Session, run: AnalysisRun) -> dict | None:
         )
 
         if not target_records:
-            result = {"gate_result": "low", "hours": None}
+            result = {"gate_result": "insufficient_data", "hours": None}
             run.forecast_composite = result
             db.commit()
             return result
@@ -138,9 +138,16 @@ def generate_forecast_composite(db: Session, run: AnalysisRun) -> dict | None:
         features = compute_daily_features(
             target_records, run.location_id, run.target_date, window,
         )
+
+        # --- 2. Sufficiency guard (same as sea-breeze panel) ---
+        if features.wind_speed_increase is None and features.onshore_fraction is None:
+            result = {"gate_result": "insufficient_data", "hours": None}
+            run.forecast_composite = result
+            db.commit()
+            return result
+
         classification = classify_sea_breeze(features)
 
-        # --- 2. Gate check ---
         if classification.classification == "low":
             result = {"gate_result": "low", "hours": None}
             run.forecast_composite = result

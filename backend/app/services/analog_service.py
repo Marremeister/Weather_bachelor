@@ -555,8 +555,12 @@ def run_analog_analysis(
         if mode == "forecast" and candidates:
             try:
                 composite = generate_forecast_composite(db, run)
-                if composite and composite.get("gate_result") == "low":
-                    run.summary = "Sea breeze probability low. No forecast produced."
+                if composite:
+                    gate = composite.get("gate_result")
+                    if gate == "low":
+                        run.summary = "Sea breeze probability low. No forecast produced."
+                    elif gate == "insufficient_data":
+                        run.summary = "Insufficient forecast data to classify sea breeze. No forecast produced."
             except Exception:
                 logger.exception(
                     "Forecast composite failed for run %d (non-fatal)", run.id,

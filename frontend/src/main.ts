@@ -14,7 +14,7 @@ import {
   listAnalysisRuns,
   runAnalysis,
 } from "./api";
-import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart } from "./charts";
+import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart, disposeForecastChart } from "./charts";
 import {
   renderSummaryPanel,
   renderHourlyTable,
@@ -677,12 +677,23 @@ async function renderForecastPanel(
 
     renderForecastGateBadge(forecastGateBadge, data);
 
-    if (data.gate_result !== "low" && data.hours && data.hours.length > 0) {
+    const hasHours = data.gate_result !== "low"
+      && data.gate_result !== "insufficient_data"
+      && data.hours && data.hours.length > 0;
+
+    if (hasHours) {
       renderForecastChart(forecastChartEl, data);
       renderForecastTable(forecastTableEl, data);
+      exportForecastPngBtn.hidden = false;
+      exportForecastCsvBtn.hidden = false;
+      forecastTracesToggle.parentElement!.hidden = false;
     } else {
+      disposeForecastChart();
       forecastChartEl.innerHTML = "";
       forecastTableEl.innerHTML = "";
+      exportForecastPngBtn.hidden = true;
+      exportForecastCsvBtn.hidden = true;
+      forecastTracesToggle.parentElement!.hidden = true;
     }
 
     forecastCompositeSection.hidden = false;

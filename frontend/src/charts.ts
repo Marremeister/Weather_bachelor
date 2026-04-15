@@ -1559,6 +1559,13 @@ export function getForecastChart(): ECharts | null {
   return forecastChart;
 }
 
+export function disposeForecastChart(): void {
+  if (forecastChart) {
+    forecastChart.dispose();
+    forecastChart = null;
+  }
+}
+
 function handleResize() {
   windOverlayChart?.resize();
   tempPressureChart?.resize();

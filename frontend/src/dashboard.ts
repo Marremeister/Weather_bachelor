@@ -419,10 +419,18 @@ export function renderForecastGateBadge(
     high: "#2b8a3e",
     medium: "#e67700",
     low: "#c92a2a",
+    insufficient_data: "#868e96",
   };
   const color = colorMap[gate] ?? "#868e96";
 
-  if (gate === "low") {
+  if (gate === "insufficient_data") {
+    container.innerHTML = `
+      <div style="padding:0.75rem;border-radius:0.5rem;background:#f8f9fa;border:1px solid #dee2e6;margin-bottom:1rem;">
+        <span style="display:inline-block;padding:0.2rem 0.6rem;border-radius:0.25rem;background:${color};color:#fff;font-weight:600;font-size:0.85rem;">Insufficient data</span>
+        <span style="margin-left:0.5rem;color:#495057;font-size:0.9rem;">Not enough forecast data to classify sea breeze probability.</span>
+      </div>
+    `;
+  } else if (gate === "low") {
     container.innerHTML = `
       <div style="padding:0.75rem;border-radius:0.5rem;background:#fff5f5;border:1px solid #ffc9c9;margin-bottom:1rem;">
         <span style="display:inline-block;padding:0.2rem 0.6rem;border-radius:0.25rem;background:${color};color:#fff;font-weight:600;font-size:0.85rem;">Low sea breeze probability</span>
