@@ -1,4 +1,4 @@
-import type { AnalogHourlyResponse, AnalysisRequest, AnalysisRunDetail, AnalysisRunSummary, AnalogResult, BiasReportResponse, DistanceDistributionData, ForecastCompositeData, HealthResponse, LibraryStatusResponse, Location, ObservationFetchResponse, ObservationRecord, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, ValidationMetrics, WeatherFetchResponse, WeatherRecord, WeatherStation } from "./types";
+import type { AnalogHourlyResponse, AnalysisRequest, AnalysisRunDetail, AnalysisRunSummary, AnalogResult, BiasReportResponse, DistanceDistributionData, ForecastCompositeData, HealthResponse, LibraryStatusResponse, Location, ObservationFetchResponse, ObservationRecord, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, ValidationMetrics, ValidationRunResult, ValidationRunStatus, ValidationRunSummary, WeatherFetchResponse, WeatherRecord, WeatherStation } from "./types";
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch("/api/health");
@@ -270,6 +270,55 @@ export async function getObservations(
   if (!res.ok) throw new Error(`Observations query failed: ${res.status}`);
   return res.json() as Promise<ObservationRecord[]>;
 }
+
+// --- Batch Validation ---
+
+export async function triggerBatchValidation(
+  locationId: number,
+  evaluationMethod: string = "temporal_split",
+  exclusionBufferDays: number = 7,
+  topN: number = 10,
+): Promise<{ run_id: number; status: string }> {
+  const res = await fetch("/api/validation/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      location_id: locationId,
+      evaluation_method: evaluationMethod,
+      exclusion_buffer_days: exclusionBufferDays,
+      top_n: topN,
+    }),
+  });
+  if (!res.ok) throw new Error(`Batch validation trigger failed: ${res.status}`);
+  return res.json();
+}
+
+export async function getValidationRunStatus(
+  runId: number,
+): Promise<ValidationRunStatus> {
+  const res = await fetch(`/api/validation/${runId}/status`);
+  if (!res.ok) throw new Error(`Validation run status fetch failed: ${res.status}`);
+  return res.json() as Promise<ValidationRunStatus>;
+}
+
+export async function getValidationRunResult(
+  runId: number,
+): Promise<ValidationRunResult> {
+  const res = await fetch(`/api/validation/${runId}`);
+  if (!res.ok) throw new Error(`Validation run result fetch failed: ${res.status}`);
+  return res.json() as Promise<ValidationRunResult>;
+}
+
+export async function listBatchValidationRuns(
+  locationId: number,
+): Promise<ValidationRunSummary[]> {
+  const params = new URLSearchParams({ location_id: String(locationId) });
+  const res = await fetch(`/api/validation/runs?${params}`);
+  if (!res.ok) throw new Error(`List validation runs failed: ${res.status}`);
+  return res.json() as Promise<ValidationRunSummary[]>;
+}
+
+// --- Single-day Observation Validation ---
 
 export async function getValidationMetrics(
   runId: number,

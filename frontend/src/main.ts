@@ -14,9 +14,13 @@ import {
   getSeaBreezePanel,
   getSeasonalHeatmap,
   getValidationMetrics,
+  getValidationRunResult,
+  getValidationRunStatus,
   getWeatherRecords,
   listAnalysisRuns,
+  listBatchValidationRuns,
   runAnalysis,
+  triggerBatchValidation,
 } from "./api";
 import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart, disposeForecastChart } from "./charts";
 import {
@@ -30,6 +34,10 @@ import {
   renderForecastGateBadge,
   renderForecastTable,
   renderValidationMetrics,
+  renderBatchClassificationMetrics,
+  renderBatchContinuousMetrics,
+  renderGateSensitivityTable,
+  renderSourceStratificationTable,
 } from "./dashboard";
 import {
   downloadWeatherCsv,
@@ -49,7 +57,7 @@ import {
   downloadForecastChart,
   downloadForecastCsv,
 } from "./export";
-import type { AnalogHourlyResponse, AnalysisRunDetail, ForecastCompositeData, Location, ObservationRecord, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, WeatherRecord, WeatherStation } from "./types";
+import type { AnalogHourlyResponse, AnalysisRunDetail, ForecastCompositeData, Location, ObservationRecord, SeaBreezeClassification, SeaBreezePanelData, SeasonalHeatmapData, ValidationRunResult, WeatherRecord, WeatherStation } from "./types";
 import "./styles.css";
 
 // --- DOM refs ---
@@ -889,6 +897,165 @@ classifyBtn.addEventListener("click", async () => {
   }
 });
 
+// --- Batch Validation ---
+
+const valMethodSelect = document.getElementById("val-method") as HTMLSelectElement;
+const valBufferInput = document.getElementById("val-buffer") as HTMLInputElement;
+const valTopNInput = document.getElementById("val-topn") as HTMLInputElement;
+const runValidationBtn = document.getElementById("run-validation-btn") as HTMLButtonElement;
+const valProgress = document.getElementById("val-progress")!;
+const valProgressLabel = document.getElementById("val-progress-label")!;
+const valProgressCount = document.getElementById("val-progress-count")!;
+const valProgressBar = document.getElementById("val-progress-bar")!;
+const valError = document.getElementById("val-error")!;
+const valResults = document.getElementById("val-results")!;
+const valClassificationGrid = document.getElementById("val-classification-grid")!;
+const valContinuousGrid = document.getElementById("val-continuous-grid")!;
+const valGateTable = document.getElementById("val-gate-table")!;
+const valSourceTable = document.getElementById("val-source-table")!;
+const valExportCsvBtn = document.getElementById("val-export-csv-btn") as HTMLButtonElement;
+const valHistoryList = document.getElementById("val-history-list")!;
+const refreshValHistoryBtn = document.getElementById("refresh-val-history-btn") as HTMLButtonElement;
+
+let currentValRunId: number | null = null;
+let valPollTimer: ReturnType<typeof setInterval> | null = null;
+
+async function loadValHistory() {
+  const locId = Number(locationSelect.value);
+  if (!locId) return;
+  try {
+    const runs = await listBatchValidationRuns(locId);
+    if (runs.length === 0) {
+      valHistoryList.innerHTML = `<p class="history-empty">No validation runs found.</p>`;
+      return;
+    }
+    valHistoryList.innerHTML = runs
+      .map((r) => {
+        const statusCls = r.status === "completed" ? "completed" : r.status === "failed" ? "failed" : "running";
+        const pct = r.total_days > 0 ? Math.round((r.completed_days / r.total_days) * 100) : 0;
+        return `<div class="history-item" data-val-run-id="${r.id}" style="cursor:pointer;">
+          <span class="status-badge ${statusCls}">${r.status}</span>
+          <span>${r.evaluation_method}</span>
+          <span>${r.completed_days}/${r.total_days} days (${pct}%)</span>
+          <span style="color:#868e96;font-size:0.82rem;">${r.created_at ? new Date(r.created_at).toLocaleString() : ""}</span>
+        </div>`;
+      })
+      .join("");
+
+    valHistoryList.querySelectorAll("[data-val-run-id]").forEach((el) => {
+      el.addEventListener("click", async () => {
+        const runId = Number((el as HTMLElement).dataset.valRunId);
+        await loadValResults(runId);
+      });
+    });
+  } catch {
+    valHistoryList.innerHTML = `<p class="history-empty">Failed to load validation runs.</p>`;
+  }
+}
+
+function renderValResults(result: ValidationRunResult) {
+  if (result.aggregate_metrics) {
+    renderBatchClassificationMetrics(valClassificationGrid, result.aggregate_metrics);
+    renderBatchContinuousMetrics(valContinuousGrid, result.aggregate_metrics);
+  }
+  if (result.gate_sensitivity) {
+    renderGateSensitivityTable(valGateTable, result.gate_sensitivity);
+  }
+  if (result.source_stratification) {
+    renderSourceStratificationTable(valSourceTable, result.source_stratification);
+  }
+  valResults.hidden = false;
+}
+
+async function loadValResults(runId: number) {
+  currentValRunId = runId;
+  try {
+    const result = await getValidationRunResult(runId);
+    if (result.status === "completed") {
+      renderValResults(result);
+      valProgress.hidden = true;
+      valError.hidden = true;
+    } else if (result.status === "failed") {
+      valError.textContent = result.error_message || "Validation run failed.";
+      valError.hidden = false;
+      valProgress.hidden = true;
+    } else {
+      // Still running, start polling
+      startValPolling(runId);
+    }
+  } catch {
+    valError.textContent = "Failed to load validation results.";
+    valError.hidden = false;
+  }
+}
+
+function startValPolling(runId: number) {
+  valProgress.hidden = false;
+  valResults.hidden = true;
+  valError.hidden = true;
+  runValidationBtn.disabled = true;
+
+  if (valPollTimer) clearInterval(valPollTimer);
+  valPollTimer = setInterval(async () => {
+    try {
+      const status = await getValidationRunStatus(runId);
+      const pct = status.total_days > 0 ? Math.round((status.completed_days / status.total_days) * 100) : 0;
+      valProgressLabel.textContent = status.status === "running" ? "Running..." : status.status;
+      valProgressCount.textContent = `${status.completed_days}/${status.total_days} days`;
+      valProgressBar.style.width = `${pct}%`;
+
+      if (status.status === "completed" || status.status === "failed") {
+        if (valPollTimer) clearInterval(valPollTimer);
+        valPollTimer = null;
+        runValidationBtn.disabled = false;
+        if (status.status === "completed") {
+          await loadValResults(runId);
+        } else {
+          valError.textContent = status.error_message || "Validation run failed.";
+          valError.hidden = false;
+          valProgress.hidden = true;
+        }
+        loadValHistory();
+      }
+    } catch {
+      if (valPollTimer) clearInterval(valPollTimer);
+      valPollTimer = null;
+      runValidationBtn.disabled = false;
+    }
+  }, 3000);
+}
+
+runValidationBtn.addEventListener("click", async () => {
+  const locId = Number(locationSelect.value);
+  if (!locId) return;
+
+  const method = valMethodSelect.value;
+  const buffer = Number(valBufferInput.value);
+  const topN = Number(valTopNInput.value);
+
+  runValidationBtn.disabled = true;
+  valError.hidden = true;
+  valResults.hidden = true;
+
+  try {
+    const resp = await triggerBatchValidation(locId, method, buffer, topN);
+    currentValRunId = resp.run_id;
+    startValPolling(resp.run_id);
+  } catch (err) {
+    valError.textContent = `Failed to start validation: ${err instanceof Error ? err.message : String(err)}`;
+    valError.hidden = false;
+    runValidationBtn.disabled = false;
+  }
+});
+
+valExportCsvBtn.addEventListener("click", () => {
+  if (currentValRunId != null) {
+    window.open(`/api/validation/${currentValRunId}/export/csv`, "_blank");
+  }
+});
+
+refreshValHistoryBtn.addEventListener("click", () => loadValHistory());
+
 // --- Boot ---
 
 initHealth();
@@ -896,3 +1063,4 @@ initLocations();
 initStations();
 setDefaultDates();
 loadHistory();
+loadValHistory();

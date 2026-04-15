@@ -12,7 +12,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models.location import Location
 from app.models.weather_station import WeatherStation
-from app.routers import analysis, classification, library, locations, observations, weather
+from app.routers import analysis, classification, library, locations, observations, validation, weather
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -79,6 +79,7 @@ app.include_router(classification.router)
 app.include_router(analysis.router)
 app.include_router(library.router)
 app.include_router(observations.router)
+app.include_router(validation.router)
 
 
 def _get_psycopg_dsn() -> str:

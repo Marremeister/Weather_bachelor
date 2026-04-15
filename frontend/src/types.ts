@@ -264,6 +264,97 @@ export interface ObservationFetchResponse {
   cached: boolean;
 }
 
+// --- Batch Validation ---
+
+export interface BatchAggregateMetrics {
+  tp: number;
+  fp: number;
+  tn: number;
+  fn: number;
+  precision: number | null;
+  recall: number | null;
+  f1: number | null;
+  tws_mae: number | null;
+  tws_rmse: number | null;
+  twd_circular_mae: number | null;
+  peak_speed_error_mean: number | null;
+  onset_error_mean: number | null;
+  skill_score: number | null;
+  total_days: number;
+  sea_breeze_days: number;
+  forecast_produced_days: number;
+}
+
+export interface GateSensitivityEntry {
+  gate_level: number;
+  gate_label: string;
+  coverage: number | null;
+  tp: number;
+  fp: number;
+  tn: number;
+  fn: number;
+  precision: number | null;
+  recall: number | null;
+  f1: number | null;
+  conditional_tws_mae: number | null;
+  conditional_tws_rmse: number | null;
+}
+
+export interface SourceStratificationEntry {
+  source: string;
+  day_count: number;
+  tws_mae: number | null;
+  tws_rmse: number | null;
+  twd_circular_mae: number | null;
+}
+
+export interface ValidationRunStatus {
+  id: number;
+  status: string;
+  total_days: number;
+  completed_days: number;
+  error_message: string | null;
+}
+
+export interface ValidationRunResult {
+  id: number;
+  location_id: number;
+  evaluation_method: string;
+  exclusion_buffer_days: number;
+  top_n: number;
+  library_start_date: string | null;
+  library_end_date: string | null;
+  test_start_date: string | null;
+  test_end_date: string | null;
+  historical_source: string | null;
+  forecast_source: string | null;
+  status: string;
+  total_days: number;
+  completed_days: number;
+  error_message: string | null;
+  aggregate_metrics: BatchAggregateMetrics | null;
+  gate_sensitivity: GateSensitivityEntry[] | null;
+  source_stratification: SourceStratificationEntry[] | null;
+  per_day_results: Record<string, unknown>[] | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string | null;
+}
+
+export interface ValidationRunSummary {
+  id: number;
+  location_id: number;
+  evaluation_method: string;
+  status: string;
+  total_days: number;
+  completed_days: number;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string | null;
+}
+
+// --- Single-day Observation Validation ---
+
 export interface ValidationMetrics {
   tws_mae: number | null;
   tws_max_error: number | null;

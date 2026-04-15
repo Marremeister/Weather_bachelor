@@ -1,4 +1,4 @@
-import type { AnalogResult, AnalysisRunDetail, BiasCorrection, ForecastCompositeData, LibraryStatusResponse, SeaBreezePanelData, ValidationMetrics, WeatherRecord } from "./types";
+import type { AnalogResult, AnalysisRunDetail, BatchAggregateMetrics, BiasCorrection, ForecastCompositeData, GateSensitivityEntry, LibraryStatusResponse, SeaBreezePanelData, SourceStratificationEntry, ValidationMetrics, WeatherRecord } from "./types";
 import { renderAnalogDonutChart } from "./charts";
 
 export function renderSummaryPanel(
@@ -545,6 +545,190 @@ export function renderValidationMetrics(
   `);
 
   container.innerHTML = items.join("");
+}
+
+// --- Batch Validation Rendering ---
+
+export function renderBatchClassificationMetrics(
+  container: HTMLElement,
+  m: BatchAggregateMetrics,
+): void {
+  const items: string[] = [];
+
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Total Days</span>
+      <span class="value">${m.total_days}</span>
+    </div>
+  `);
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Sea Breeze Days</span>
+      <span class="value">${m.sea_breeze_days}</span>
+    </div>
+  `);
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Forecasts Produced</span>
+      <span class="value">${m.forecast_produced_days}</span>
+    </div>
+  `);
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Confusion Matrix</span>
+      <span class="value">TP=${m.tp} FP=${m.fp} TN=${m.tn} FN=${m.fn}</span>
+    </div>
+  `);
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Precision</span>
+      <span class="value">${m.precision != null ? (m.precision * 100).toFixed(1) + "%" : "\u2014"}</span>
+    </div>
+  `);
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Recall</span>
+      <span class="value">${m.recall != null ? (m.recall * 100).toFixed(1) + "%" : "\u2014"}</span>
+    </div>
+  `);
+  items.push(`
+    <div class="summary-item">
+      <span class="label">F1 Score</span>
+      <span class="value">${m.f1 != null ? m.f1.toFixed(3) : "\u2014"}</span>
+    </div>
+  `);
+
+  container.innerHTML = items.join("");
+}
+
+export function renderBatchContinuousMetrics(
+  container: HTMLElement,
+  m: BatchAggregateMetrics,
+): void {
+  function badge(value: number | null, thresholds: [number, number], unit: string): string {
+    if (value == null) return `<span class="quality-badge neutral">N/A</span>`;
+    const cls = Math.abs(value) <= thresholds[0] ? "good" : Math.abs(value) <= thresholds[1] ? "warning" : "bad";
+    return `<span class="quality-badge ${cls}">${value.toFixed(2)} ${unit}</span>`;
+  }
+
+  const items: string[] = [];
+
+  items.push(`
+    <div class="summary-item">
+      <span class="label">TWS MAE</span>
+      <span class="value">${badge(m.tws_mae, [1.5, 2.5], "m/s")}</span>
+    </div>
+  `);
+  items.push(`
+    <div class="summary-item">
+      <span class="label">TWS RMSE</span>
+      <span class="value">${badge(m.tws_rmse, [2, 3], "m/s")}</span>
+    </div>
+  `);
+  items.push(`
+    <div class="summary-item">
+      <span class="label">TWD Circular MAE</span>
+      <span class="value">${badge(m.twd_circular_mae, [30, 60], "\u00b0")}</span>
+    </div>
+  `);
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Peak Speed Error (mean)</span>
+      <span class="value">${badge(m.peak_speed_error_mean, [1, 2], "m/s")}</span>
+    </div>
+  `);
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Onset Error (mean)</span>
+      <span class="value">${m.onset_error_mean != null ? m.onset_error_mean.toFixed(1) + " h" : "\u2014"}</span>
+    </div>
+  `);
+  items.push(`
+    <div class="summary-item">
+      <span class="label">Skill Score vs Climatology</span>
+      <span class="value">${badge(m.skill_score, [0.1, 0.3], "")}</span>
+    </div>
+  `);
+
+  container.innerHTML = items.join("");
+}
+
+export function renderGateSensitivityTable(
+  container: HTMLElement,
+  entries: GateSensitivityEntry[],
+): void {
+  if (entries.length === 0) {
+    container.innerHTML = `<thead><tr><th colspan="8">No gate sensitivity data</th></tr></thead>`;
+    return;
+  }
+
+  const headerRow = `
+    <thead>
+      <tr>
+        <th>Gate</th>
+        <th class="num">Coverage</th>
+        <th class="num">TP</th>
+        <th class="num">FP</th>
+        <th class="num">Precision</th>
+        <th class="num">Recall</th>
+        <th class="num">F1</th>
+        <th class="num">Cond. TWS MAE</th>
+      </tr>
+    </thead>
+  `;
+
+  const bodyRows = entries
+    .map((e) => `
+      <tr>
+        <td>${escapeHtml(e.gate_label)} indicators</td>
+        <td class="num">${e.coverage != null ? (e.coverage * 100).toFixed(1) + "%" : "\u2014"}</td>
+        <td class="num">${e.tp}</td>
+        <td class="num">${e.fp}</td>
+        <td class="num">${e.precision != null ? (e.precision * 100).toFixed(1) + "%" : "\u2014"}</td>
+        <td class="num">${e.recall != null ? (e.recall * 100).toFixed(1) + "%" : "\u2014"}</td>
+        <td class="num">${e.f1 != null ? e.f1.toFixed(3) : "\u2014"}</td>
+        <td class="num">${e.conditional_tws_mae != null ? e.conditional_tws_mae.toFixed(2) + " m/s" : "\u2014"}</td>
+      </tr>
+    `)
+    .join("");
+
+  container.innerHTML = `${headerRow}<tbody>${bodyRows}</tbody>`;
+}
+
+export function renderSourceStratificationTable(
+  container: HTMLElement,
+  entries: SourceStratificationEntry[],
+): void {
+  if (entries.length === 0) {
+    container.innerHTML = `<thead><tr><th colspan="5">No source stratification data</th></tr></thead>`;
+    return;
+  }
+
+  const headerRow = `
+    <thead>
+      <tr>
+        <th>Source</th>
+        <th class="num">Days</th>
+        <th class="num">TWS MAE</th>
+        <th class="num">TWS RMSE</th>
+        <th class="num">TWD Circular MAE</th>
+      </tr>
+    </thead>
+  `;
+
+  const bodyRows = entries
+    .map((e) => `
+      <tr>
+        <td>${escapeHtml(e.source)}</td>
+        <td class="num">${e.day_count}</td>
+        <td class="num">${e.tws_mae != null ? e.tws_mae.toFixed(2) + " m/s" : "\u2014"}</td>
+        <td class="num">${e.tws_rmse != null ? e.tws_rmse.toFixed(2) + " m/s" : "\u2014"}</td>
+        <td class="num">${e.twd_circular_mae != null ? e.twd_circular_mae.toFixed(1) + "\u00b0" : "\u2014"}</td>
+      </tr>
+    `)
+    .join("");
+
+  container.innerHTML = `${headerRow}<tbody>${bodyRows}</tbody>`;
 }
 
 function fmt(value: number | null, decimals: number): string {

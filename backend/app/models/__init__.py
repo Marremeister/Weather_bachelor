@@ -7,6 +7,7 @@ from app.models.location import Location
 from app.models.observation import Observation
 from app.models.source_bias_correction import SourceBiasCorrection
 from app.models.weather_record import WeatherRecord
+from app.models.validation_run import ValidationRun
 from app.models.weather_station import WeatherStation
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "Location",
     "Observation",
     "SourceBiasCorrection",
+    "ValidationRun",
     "WeatherRecord",
     "WeatherStation",
 ]

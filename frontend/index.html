@@ -265,6 +265,75 @@
         </div>
       </section>
 
+      <!-- Batch Validation -->
+      <section class="card" id="batch-validation-section">
+        <div class="section-header">
+          <h2>Batch Validation</h2>
+        </div>
+        <div class="batch-validation-form" style="display:flex;gap:1rem;align-items:end;flex-wrap:wrap;margin-bottom:1rem;">
+          <div class="form-group" style="min-width:160px;">
+            <label for="val-method">Method</label>
+            <select id="val-method" style="font-size:0.85rem;padding:0.3rem 0.5rem;">
+              <option value="temporal_split">Temporal Split</option>
+              <option value="leave_one_out">Leave-One-Out</option>
+            </select>
+          </div>
+          <div class="form-group form-group-sm">
+            <label for="val-buffer">Buffer (days)</label>
+            <input type="number" id="val-buffer" value="7" min="0" max="30" style="width:70px;" />
+          </div>
+          <div class="form-group form-group-sm">
+            <label for="val-topn">Top N</label>
+            <input type="number" id="val-topn" value="10" min="1" max="50" style="width:70px;" />
+          </div>
+          <button id="run-validation-btn" class="btn-primary" style="height:fit-content;">Run Validation</button>
+        </div>
+        <div id="val-progress" hidden>
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+            <span id="val-progress-label" style="font-size:0.9rem;color:#495057;">Running...</span>
+            <span id="val-progress-count" style="font-size:0.85rem;color:#868e96;">0/0</span>
+          </div>
+          <div style="background:#e9ecef;border-radius:4px;height:8px;overflow:hidden;">
+            <div id="val-progress-bar" style="background:#228be6;height:100%;width:0%;transition:width 0.3s;"></div>
+          </div>
+        </div>
+        <div id="val-error" class="error-msg" hidden></div>
+        <div id="val-results" hidden>
+          <div class="section-header" style="margin-top:1.25rem;">
+            <h3>Classification Metrics</h3>
+          </div>
+          <div id="val-classification-grid" class="summary-grid"></div>
+          <div class="section-header" style="margin-top:1.25rem;">
+            <h3>Continuous Metrics (Sea Breeze Days)</h3>
+          </div>
+          <div id="val-continuous-grid" class="summary-grid"></div>
+          <div class="section-header" style="margin-top:1.25rem;">
+            <h3>Gate Sensitivity</h3>
+          </div>
+          <div class="table-scroll">
+            <table id="val-gate-table" class="data-table"></table>
+          </div>
+          <div class="section-header" style="margin-top:1.25rem;">
+            <h3>Source Stratification</h3>
+          </div>
+          <div class="table-scroll">
+            <table id="val-source-table" class="data-table"></table>
+          </div>
+          <div style="margin-top:1rem;">
+            <button id="val-export-csv-btn" class="btn-export">Export Per-Day CSV</button>
+          </div>
+        </div>
+        <div id="val-history" style="margin-top:1.25rem;">
+          <div class="section-header">
+            <h3>Previous Validation Runs</h3>
+            <button id="refresh-val-history-btn" class="btn-export">Refresh</button>
+          </div>
+          <div id="val-history-list" class="history-list">
+            <p class="history-empty">No validation runs found.</p>
+          </div>
+        </div>
+      </section>
+
       <!-- Legacy sections -->
       <details class="legacy-section">
         <summary>Health / Locations / Classification</summary>
