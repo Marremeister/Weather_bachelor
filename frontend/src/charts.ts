@@ -1996,6 +1996,7 @@ export function renderValDetailForecastChart(
   const medianData = hours.map((h) => h.median_tws);
   const p25Data = hours.map((h) => h.p25_tws);
   const p10Data = hours.map((h) => h.p10_tws);
+  const twdData = hours.map((h) => h.circular_mean_twd);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const series: any[] = [
@@ -2056,12 +2057,23 @@ export function renderValDetailForecastChart(
       itemStyle: { color: "#228be6" },
       z: 5,
     },
+    {
+      name: "Mean TWD",
+      type: "scatter",
+      yAxisIndex: 1,
+      data: twdData,
+      symbolSize: 8,
+      itemStyle: { color: "#e67700" },
+      z: 5,
+    },
   ];
 
-  const legendData = ["Median TWS", "P25-P75 (IQR)"];
+  const legendData = ["Median TWS", "P25-P75 (IQR)", "Mean TWD"];
 
+  // Build ERA5 lookup once for both TWS and TWD overlays + tooltip
+  let recsByHour: Map<number, WeatherRecord> | null = null;
   if (actualRecords && actualRecords.length > 0) {
-    const recsByHour = new Map<number, WeatherRecord>();
+    recsByHour = new Map<number, WeatherRecord>();
     for (const rec of actualRecords) {
       const h = new Date(rec.valid_time_local).getHours();
       if (!recsByHour.has(h)) recsByHour.set(h, rec);
@@ -2069,8 +2081,14 @@ export function renderValDetailForecastChart(
 
     const actualTwsData = xLabels.map((_, hi) => {
       const targetHour = hours[hi].hour_local;
-      const rec = recsByHour.get(targetHour);
+      const rec = recsByHour!.get(targetHour);
       return rec?.true_wind_speed ?? null;
+    });
+
+    const actualTwdData = xLabels.map((_, hi) => {
+      const targetHour = hours[hi].hour_local;
+      const rec = recsByHour!.get(targetHour);
+      return rec?.true_wind_direction ?? null;
     });
 
     series.push({
@@ -2084,7 +2102,17 @@ export function renderValDetailForecastChart(
       itemStyle: { color: "#e03131" },
       z: 6,
     });
-    legendData.push("Actual ERA5 TWS");
+    series.push({
+      name: "Actual ERA5 TWD",
+      type: "scatter",
+      yAxisIndex: 1,
+      data: actualTwdData,
+      symbolSize: 7,
+      symbol: "diamond",
+      itemStyle: { color: "#2b8a3e" },
+      z: 6,
+    });
+    legendData.push("Actual ERA5 TWS", "Actual ERA5 TWD");
   }
 
   valDetailChart.setOption({
@@ -2106,34 +2134,50 @@ export function renderValDetailForecastChart(
         html += `<br/>Median TWS: ${h.median_tws != null ? h.median_tws.toFixed(1) : "N/A"} m/s`;
         html += `<br/>IQR: ${h.p25_tws != null ? h.p25_tws.toFixed(1) : "?"}\u2013${h.p75_tws != null ? h.p75_tws.toFixed(1) : "?"} m/s`;
         html += `<br/>90% range: ${h.p10_tws != null ? h.p10_tws.toFixed(1) : "?"}\u2013${h.p90_tws != null ? h.p90_tws.toFixed(1) : "?"} m/s`;
-        // Show actual ERA5 value if present
-        if (actualRecords && actualRecords.length > 0 && h) {
-          const rec = new Map<number, WeatherRecord>();
-          for (const r of actualRecords) {
-            const hr = new Date(r.valid_time_local).getHours();
-            if (!rec.has(hr)) rec.set(hr, r);
-          }
-          const actual = rec.get(h.hour_local);
+        html += `<br/>Mean TWD: ${h.circular_mean_twd != null ? h.circular_mean_twd.toFixed(0) : "N/A"}\u00b0`;
+        if (h.twd_circular_std != null) {
+          html += ` (\u00b1${h.twd_circular_std.toFixed(0)}\u00b0)`;
+        }
+        if (recsByHour) {
+          const actual = recsByHour.get(h.hour_local);
           if (actual?.true_wind_speed != null) {
-            html += `<br/>Actual ERA5: ${actual.true_wind_speed.toFixed(1)} m/s`;
+            html += `<br/>Actual TWS: ${actual.true_wind_speed.toFixed(1)} m/s`;
+          }
+          if (actual?.true_wind_direction != null) {
+            html += `<br/>Actual TWD: ${actual.true_wind_direction.toFixed(0)}\u00b0`;
           }
         }
         return html;
       },
     },
     legend: { top: 0, left: "center", data: legendData },
-    grid: { left: 50, right: 30, top: 35, bottom: 50 },
+    grid: { left: 50, right: 65, top: 35, bottom: 50 },
     xAxis: {
       type: "category",
       data: xLabels,
       axisLabel: { fontSize: 12 },
     },
-    yAxis: {
-      type: "value",
-      name: "m/s",
-      nameLocation: "middle",
-      nameGap: 35,
-    },
+    yAxis: [
+      {
+        type: "value",
+        name: "m/s",
+        nameLocation: "middle",
+        nameGap: 35,
+      },
+      {
+        type: "value",
+        name: "Direction",
+        min: 0,
+        max: 360,
+        interval: 90,
+        axisLabel: {
+          formatter(value: number) {
+            const labels: Record<number, string> = { 0: "N", 90: "E", 180: "S", 270: "W", 360: "N" };
+            return labels[value] ?? `${value}\u00b0`;
+          },
+        },
+      },
+    ],
     series,
   });
 }

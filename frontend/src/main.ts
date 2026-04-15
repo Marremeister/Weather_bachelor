@@ -1072,12 +1072,14 @@ async function drillDownToValDay(date: string) {
     const gate = String(dayEntry.gate_result ?? "—");
     const actual = String(dayEntry.actual_classification ?? "—");
     const twsMae = dayEntry.tws_mae != null ? Number(dayEntry.tws_mae).toFixed(2) + " m/s" : "—";
+    const twdMae = dayEntry.twd_circular_mae != null ? Number(dayEntry.twd_circular_mae).toFixed(1) + "\u00b0" : "—";
     const peakErr = dayEntry.peak_speed_error != null ? Number(dayEntry.peak_speed_error).toFixed(2) + " m/s" : "—";
     const onsetErr = dayEntry.onset_error_hours != null ? Number(dayEntry.onset_error_hours).toFixed(1) + " h" : "—";
     valDetailMetrics.innerHTML = `
       <div class="metric-box"><div class="metric-label">Gate Result</div><div class="metric-value">${gate}</div></div>
       <div class="metric-box"><div class="metric-label">Actual</div><div class="metric-value">${actual}</div></div>
       <div class="metric-box"><div class="metric-label">TWS MAE</div><div class="metric-value">${twsMae}</div></div>
+      <div class="metric-box"><div class="metric-label">TWD MAE</div><div class="metric-value">${twdMae}</div></div>
       <div class="metric-box"><div class="metric-label">Peak Error</div><div class="metric-value">${peakErr}</div></div>
       <div class="metric-box"><div class="metric-label">Onset Error</div><div class="metric-value">${onsetErr}</div></div>
     `;
@@ -1092,14 +1094,16 @@ async function drillDownToValDay(date: string) {
   valDetailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 
   try {
+    const histSource = currentValResult.historical_source ?? "era5";
     const request = {
       location_id: currentValResult.location_id,
       target_date: date,
       historical_start_date: currentValResult.library_start_date ?? "",
       historical_end_date: currentValResult.library_end_date ?? "",
       top_n: currentValResult.top_n,
-      mode: "historical",
-      historical_source: currentValResult.historical_source ?? "era5",
+      mode: "forecast",
+      forecast_source: histSource,
+      historical_source: histSource,
     };
 
     const analysisRun = await runAnalysis(request);
