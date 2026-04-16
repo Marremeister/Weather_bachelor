@@ -134,20 +134,90 @@ Open http://localhost:5175 in a browser. Select a location and date, choose Hist
 
 ### Running the backend without Docker (optional)
 
-If you want to run the backend directly on your machine (for example to run tests or debug without Docker), install the Python dependencies with pip:
+If you want to run the backend directly on your machine (for example to run tests or debug without Docker), create a Python virtual environment and install the dependencies with pip. Python 3.12 or newer is required.
+
+Run every command below **from the project root** (the folder that contains this README). The examples below use `.venv` as the virtual environment directory — it is already listed in `.gitignore`, so it's safe to create it inside the repo.
+
+#### macOS / Linux
+
+Open a terminal and run:
 
 ```bash
-# From the project root, with Python 3.12+ and a virtualenv active:
+# 1. Create the virtual environment (only needed the first time)
+python3.12 -m venv .venv
+
+# 2. Activate it (do this every new shell session)
+source .venv/bin/activate
+
+# 3. Upgrade pip, then install dependencies
+pip install --upgrade pip
 pip install -r backend/requirements.txt
 
-# Or equivalently, install the backend as an editable package:
+# Optional: install the backend as an editable package
 pip install -e backend
 
-# For development (tests):
+# Optional: install test dependencies
 pip install pytest
 ```
 
-You will still need a running PostgreSQL instance and a valid `DATABASE_URL` in your environment. The simplest way is to keep just the `postgres` service from `docker-compose.yml` running and point `DATABASE_URL` at `localhost:5433`.
+To leave the venv later, just run `deactivate`.
+
+If `python3.12` isn't found, install it with [Homebrew](https://brew.sh/) on macOS (`brew install python@3.12`) or your package manager on Linux (e.g. `sudo apt install python3.12 python3.12-venv` on Debian/Ubuntu).
+
+#### Windows
+
+First, install Python 3.12+ from [python.org](https://www.python.org/downloads/windows/) (check "Add Python to PATH" during install). Then open **PowerShell** in the project root and run:
+
+```powershell
+# 1. Create the virtual environment (only needed the first time)
+py -3.12 -m venv .venv
+
+# 2. Activate it (do this every new shell session)
+.\.venv\Scripts\Activate.ps1
+
+# 3. Upgrade pip, then install dependencies
+pip install --upgrade pip
+pip install -r backend\requirements.txt
+
+# Optional: install the backend as an editable package
+pip install -e backend
+
+# Optional: install test dependencies
+pip install pytest
+```
+
+If PowerShell blocks the activation script with an execution policy error, run this once (as your user, not admin):
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+If you use **cmd.exe** instead of PowerShell, replace step 2 with:
+
+```cmd
+.venv\Scripts\activate.bat
+```
+
+To leave the venv later, run `deactivate`.
+
+#### Confirming it worked
+
+On any platform, you'll know the venv is active when your shell prompt starts with `(.venv)`. You can verify the interpreter and installed packages with:
+
+```bash
+python --version        # Should report 3.12.x
+pip list                # Should list fastapi, sqlalchemy, numpy, xarray, ...
+```
+
+#### Database
+
+You will still need a running PostgreSQL instance and a valid `DATABASE_URL` in your environment. The simplest option is to start **only** the `postgres` service from the provided Compose file:
+
+```bash
+docker-compose up postgres
+```
+
+and point `DATABASE_URL` at `localhost:5433` (see `.env.example` for the full connection string).
 
 ## Project Structure
 
