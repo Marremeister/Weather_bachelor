@@ -58,6 +58,30 @@ let valTwdHistogramChart: ECharts | null = null;
 let valMonthlyChart: ECharts | null = null;
 let valDetailChart: ECharts | null = null;
 
+/**
+ * Insert a null at every wrap boundary of a [0, 360) direction series
+ * so ECharts renders a gap instead of a sweep across the full y-axis.
+ *
+ * Without this, a legitimate 20° crossing through north (e.g. 350° →
+ * 10°) is drawn as a 340° downward jump through the whole range and
+ * the chart visually implies a direction shift that did not happen.
+ * We null the second point of each wrap pair — the first point's
+ * marker is preserved; the second's marker is the small price of
+ * breaking the line cleanly.
+ */
+function breakTwdWraps(data: (number | null)[]): (number | null)[] {
+  const out: (number | null)[] = data.slice();
+  for (let i = 1; i < out.length; i++) {
+    const prev = out[i - 1];
+    const cur = out[i];
+    if (prev == null || cur == null) continue;
+    if (Math.abs(cur - prev) > 180) {
+      out[i] = null;
+    }
+  }
+  return out;
+}
+
 export function renderWindOverlayChart(
   container: HTMLElement,
   records: WeatherRecord[],
@@ -1420,6 +1444,7 @@ export function renderForecastChart(
   analogTraces?: DayHourlyRecords[],
   showTraces?: boolean,
   observations?: ObservationRecord[],
+  showGfs?: boolean,
 ): void {
   if (forecastChart) forecastChart.dispose();
 
@@ -1429,6 +1454,13 @@ export function renderForecastChart(
 
   const hours = data.hours;
   const xLabels = hours.map((h) => `${String(h.hour_local).padStart(2, "0")}:00`);
+
+  const gfsByHour = new Map<number, { tws: number | null; twd: number | null }>();
+  if (showGfs && data.gfs_hours) {
+    for (const g of data.gfs_hours) {
+      gfsByHour.set(g.hour_local, { tws: g.tws, twd: g.twd });
+    }
+  }
 
   // TWS data
   const medianData = hours.map((h) => h.median_tws);
@@ -1586,9 +1618,47 @@ export function renderForecastChart(
     });
   }
 
+  // Optional GFS-only forecast overlay
+  if (showGfs && gfsByHour.size > 0) {
+    const gfsTwsData = xLabels.map((_, hi) => {
+      const targetHour = hours[hi].hour_local;
+      return gfsByHour.get(targetHour)?.tws ?? null;
+    });
+    const gfsTwdData = xLabels.map((_, hi) => {
+      const targetHour = hours[hi].hour_local;
+      return gfsByHour.get(targetHour)?.twd ?? null;
+    });
+
+    series.push({
+      name: "GFS TWS",
+      type: "line",
+      data: gfsTwsData,
+      smooth: true,
+      symbol: "triangle",
+      symbolSize: 7,
+      lineStyle: { color: "#e8590c", width: 2 },
+      itemStyle: { color: "#e8590c" },
+      z: 4,
+    });
+
+    series.push({
+      name: "GFS TWD",
+      type: "scatter",
+      yAxisIndex: 1,
+      data: gfsTwdData,
+      symbolSize: 7,
+      symbol: "triangle",
+      itemStyle: { color: "#e8590c" },
+      z: 4,
+    });
+  }
+
   const legendData = ["Median TWS", "P25-P75 (IQR)", "Mean TWD"];
   if (observations && observations.length > 0) {
     legendData.push("Observed TWS", "Observed TWD");
+  }
+  if (showGfs && gfsByHour.size > 0) {
+    legendData.push("GFS TWS", "GFS TWD");
   }
 
   forecastChart.setOption({
@@ -1617,6 +1687,11 @@ export function renderForecastChart(
           html += ` (\u00b1${h.twd_circular_std.toFixed(0)}\u00b0)`;
         }
         html += `<br/>Analogs: ${h.analog_count}`;
+        const gfs = gfsByHour.get(h.hour_local);
+        if (gfs) {
+          html += `<br/><span style="color:#e8590c">GFS TWS: ${gfs.tws != null ? gfs.tws.toFixed(1) : "N/A"} m/s</span>`;
+          html += `<br/><span style="color:#e8590c">GFS TWD: ${gfs.twd != null ? gfs.twd.toFixed(0) : "N/A"}\u00b0</span>`;
+        }
         return html;
       },
     },
@@ -2204,6 +2279,7 @@ export function renderValDetailForecastChart(
   container: HTMLElement,
   data: ForecastCompositeData,
   actualRecords?: WeatherRecord[],
+  showGfs?: boolean,
 ): void {
   if (valDetailChart) valDetailChart.dispose();
   if (!data.hours || data.hours.length === 0) return;
@@ -2213,10 +2289,22 @@ export function renderValDetailForecastChart(
   const hours = data.hours;
   const xLabels = hours.map((h) => `${String(h.hour_local).padStart(2, "0")}:00`);
 
+  const gfsByHour = new Map<number, { tws: number | null; twd: number | null }>();
+  if (showGfs && data.gfs_hours) {
+    for (const g of data.gfs_hours) {
+      gfsByHour.set(g.hour_local, { tws: g.tws, twd: g.twd });
+    }
+  }
+
   const medianData = hours.map((h) => h.median_tws);
   const p25Data = hours.map((h) => h.p25_tws);
   const p10Data = hours.map((h) => h.p10_tws);
-  const twdData = hours.map((h) => h.circular_mean_twd);
+  // Raw TWD values in [0, 360).  Drawing these directly as a line
+  // connects samples that wrap across 0°/360° (e.g. 350° → 10°) with a
+  // false ~340° jump across the whole axis.  breakTwdWraps inserts a
+  // null at every wrap boundary so ECharts renders a gap instead of a
+  // sweep through the full range.
+  const twdData = breakTwdWraps(hours.map((h) => h.circular_mean_twd));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const series: any[] = [
@@ -2308,11 +2396,13 @@ export function renderValDetailForecastChart(
       return rec?.true_wind_speed ?? null;
     });
 
-    const actualTwdData = xLabels.map((_, hi) => {
-      const targetHour = hours[hi].hour_local;
-      const rec = recsByHour!.get(targetHour);
-      return rec?.true_wind_direction ?? null;
-    });
+    const actualTwdData = breakTwdWraps(
+      xLabels.map((_, hi) => {
+        const targetHour = hours[hi].hour_local;
+        const rec = recsByHour!.get(targetHour);
+        return rec?.true_wind_direction ?? null;
+      }),
+    );
 
     series.push({
       name: "Actual TWS",
@@ -2338,6 +2428,45 @@ export function renderValDetailForecastChart(
       z: 6,
     });
     legendData.push("Actual TWS", "Actual TWD");
+  }
+
+  // GFS-only benchmark overlay
+  if (showGfs && gfsByHour.size > 0) {
+    const gfsTwsData = xLabels.map((_, hi) => {
+      const targetHour = hours[hi].hour_local;
+      return gfsByHour.get(targetHour)?.tws ?? null;
+    });
+    const gfsTwdData = breakTwdWraps(
+      xLabels.map((_, hi) => {
+        const targetHour = hours[hi].hour_local;
+        return gfsByHour.get(targetHour)?.twd ?? null;
+      }),
+    );
+
+    series.push({
+      name: "GFS TWS",
+      type: "line",
+      data: gfsTwsData,
+      smooth: true,
+      symbol: "triangle",
+      symbolSize: 7,
+      lineStyle: { color: "#e8590c", width: 2 },
+      itemStyle: { color: "#e8590c" },
+      z: 4,
+    });
+    series.push({
+      name: "GFS TWD",
+      type: "line",
+      yAxisIndex: 1,
+      data: gfsTwdData,
+      symbol: "triangle",
+      symbolSize: 7,
+      lineStyle: { color: "#e8590c", width: 2 },
+      itemStyle: { color: "#e8590c" },
+      connectNulls: false,
+      z: 4,
+    });
+    legendData.push("GFS TWS", "GFS TWD");
   }
 
   valDetailChart.setOption({
@@ -2371,6 +2500,11 @@ export function renderValDetailForecastChart(
           if (actual?.true_wind_direction != null) {
             html += `<br/>Actual TWD: ${actual.true_wind_direction.toFixed(0)}\u00b0`;
           }
+        }
+        const gfs = gfsByHour.get(h.hour_local);
+        if (gfs) {
+          html += `<br/><span style="color:#e8590c">GFS TWS: ${gfs.tws != null ? gfs.tws.toFixed(1) : "N/A"} m/s</span>`;
+          html += `<br/><span style="color:#e8590c">GFS TWD: ${gfs.twd != null ? gfs.twd.toFixed(0) : "N/A"}\u00b0</span>`;
         }
         return html;
       },

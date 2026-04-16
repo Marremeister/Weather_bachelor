@@ -128,6 +128,22 @@ def _days_already_built(
     return set(rows)
 
 
+def _expected_analysis_hours(window: AnalysisWindow) -> int:
+    """Return the number of unique local hours covered by ``window``.
+
+    This is the union of the morning and afternoon windows (which may
+    overlap at the seam, e.g. morning_end=11 and afternoon_start=11).
+    Used as a completeness guard: days with fewer distinct hours
+    available than this are treated as incomplete and are not persisted
+    to ``daily_features`` — a transient NCSS/CDS miss would otherwise
+    freeze a partial day into the library forever once the resume guard
+    starts skipping it.
+    """
+    morning = set(range(window.morning_start, window.morning_end + 1))
+    afternoon = set(range(window.afternoon_start, window.afternoon_end + 1))
+    return len(morning | afternoon)
+
+
 def _warn_on_hash_mismatch(
     db: Session,
     location_id: int,
@@ -265,9 +281,30 @@ def build_feature_library(
                     by_date[day].append(rec)
 
                 # 4. Compute features and upsert
+                # Completeness guard: only persist daily features for
+                # days that cover the full analysis window.  Otherwise a
+                # transient fetch failure during this chunk would write
+                # a partial row, and the resume guard on the next build
+                # would permanently skip the day — freezing an
+                # incomplete feature vector into the library.
+                expected_hours = _expected_analysis_hours(window)
                 rows = []
+                skipped_incomplete = 0
                 for day, day_records in by_date.items():
                     feat = compute_daily_features(day_records, location_id, day, window)
+                    if feat.hours_available < expected_hours:
+                        skipped_incomplete += 1
+                        logger.warning(
+                            "Library build (%s): skipping incomplete day %s "
+                            "(hours_available=%d, expected=%d). Will retry "
+                            "on next build.",
+                            source,
+                            day,
+                            feat.hours_available,
+                            expected_hours,
+                        )
+                        continue
+
                     feat_dict = {
                         name: getattr(feat, name, None)
                         for name in _DEFAULT_FEATURE_NAMES
@@ -302,8 +339,10 @@ def build_feature_library(
                 job.completed_chunks = idx + 1
                 db.commit()
                 logger.info(
-                    "Library build chunk %d/%d done (%s to %s)",
+                    "Library build chunk %d/%d done (%s to %s): "
+                    "%d days persisted, %d incomplete skipped",
                     idx + 1, len(chunks), chunk_start, chunk_end,
+                    len(rows), skipped_incomplete,
                 )
 
             except Exception as exc:
