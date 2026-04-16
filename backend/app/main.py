@@ -1,7 +1,16 @@
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import psycopg
+
+# Root logger at INFO so background-task workers (library_service,
+# gfs_hindcast_provider, etc.) surface progress lines in docker logs.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    force=True,
+)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
