@@ -307,7 +307,40 @@ Open http://localhost:5173. The frontend calls the backend on port 8000 — make
 
 ### Build the feature library
 
-The ERA5 feature library powers the analog matching. You can trigger a library build from the application UI. If no library is available yet, the app falls back to Open-Meteo for historical data.
+The ERA5 feature library is a table of precomputed daily feature vectors (one row per day in the 2015–2024 May–September season) that the analog matcher scans on every analysis. Until it exists, analog runs will fall back to the Open-Meteo mirror day-by-day, which is much slower and lower quality. Building it once up front is strongly recommended.
+
+There's no dedicated UI button for the build yet — you trigger it via the backend API. Use the default seeded location (`location_id=1`, Los Angeles / San Pedro) unless you've added more locations.
+
+**Option 1 — via Swagger UI** (easiest):
+
+1. Open the interactive docs:
+   - Docker setup → http://localhost:8001/docs
+   - Native setup → http://localhost:8000/docs
+2. Expand **`POST /api/library/build`**, click **Try it out**, set:
+   - `location_id`: `1`
+   - `source`: `era5` (default)
+3. Click **Execute**. The endpoint returns immediately with `{"status": "started", ...}` — the build runs in the background.
+4. Poll **`GET /api/library/status`** with the same `location_id` to watch progress (`completed_chunks` / `total_chunks`).
+
+**Option 2 — via curl:**
+
+```bash
+# Docker setup
+curl -X POST "http://localhost:8001/api/library/build?location_id=1&source=era5"
+curl "http://localhost:8001/api/library/status?location_id=1"
+
+# Native setup
+curl -X POST "http://localhost:8000/api/library/build?location_id=1&source=era5"
+curl "http://localhost:8000/api/library/status?location_id=1"
+```
+
+**What happens:** the background job walks the ERA5 season range defined by `ERA5_START_YEAR`, `ERA5_END_YEAR`, and `ERA5_MONTHS` in `.env` (default 2015–2024, May–September). For each chunk it fetches hourly ERA5 data via the CDS API (or the Open-Meteo ERA5 fallback if `CDSAPI_KEY` isn't set), computes daily features, and upserts them into the `daily_features` table. When `status` becomes `"completed"`, the library is ready.
+
+**Notes:**
+
+- A full build can take a while (the CDS API queues requests). It's safe to leave it running; progress is persisted to the database and survives backend restarts.
+- If you want to try the app immediately without waiting, you can skip this step — historical analysis will just be slower on first use for each target date.
+- Changing the `AnalysisWindow` (morning/afternoon hours, onshore sector, etc.) invalidates the library automatically via `feature_config_hash`. You'll need to rebuild after such a change.
 
 ### Run an analysis
 
