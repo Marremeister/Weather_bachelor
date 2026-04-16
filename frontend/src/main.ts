@@ -21,6 +21,7 @@ import {
   listBatchValidationRuns,
   runAnalysis,
   triggerBatchValidation,
+  triggerLibraryBuild,
 } from "./api";
 import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart, disposeForecastChart, renderValidationTimeSeriesChart, renderValidationHistogramChart, renderValidationMonthlyChart, disposeValidationCharts, renderValDetailForecastChart, disposeValDetailChart, resizeChartById } from "./charts";
 import { TabController } from "./tabs";
@@ -149,6 +150,10 @@ const exportAfternoonWrPngBtn = document.getElementById("export-afternoon-wr-png
 // History
 const historyList = document.getElementById("history-list")!;
 const refreshHistoryBtn = document.getElementById("refresh-history-btn") as HTMLButtonElement;
+
+// Feature Library
+const buildLibraryBtn = document.getElementById("build-library-btn") as HTMLButtonElement;
+const libraryStatusMsg = document.getElementById("library-status-msg")!;
 
 // Legacy
 const healthStatusEl = document.getElementById("health-status")!;
@@ -530,6 +535,93 @@ historyList.addEventListener("click", async (e) => {
 
 refreshHistoryBtn.addEventListener("click", () => {
   loadHistory();
+});
+
+// --- Feature Library ---
+
+let libraryPollTimer: number | null = null;
+
+function formatLibraryStatus(s: Awaited<ReturnType<typeof getLibraryStatus>> | null): string {
+  if (!s || !s.status || s.status === "no_build") {
+    return "No library built yet for this location. Click Build Library to start.";
+  }
+  const done = s.completed_chunks ?? 0;
+  const total = s.total_chunks ?? 0;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const src = s.source ? ` (${s.source})` : "";
+  if (s.status === "building" || s.status === "pending") {
+    return `Building${src}… ${done}/${total} chunks (${pct}%).`;
+  }
+  if (s.status === "completed") {
+    return `Library ready${src}: ${done}/${total} chunks (${pct}%).`;
+  }
+  if (s.status === "failed") {
+    return `Build failed${src}: ${s.error_message ?? "unknown error"}.`;
+  }
+  return `Status: ${s.status}${src} — ${done}/${total} chunks.`;
+}
+
+async function loadLibraryStatus(locationId?: number) {
+  const locId = locationId ?? Number(locationSelect.value);
+  if (!locId) {
+    libraryStatusMsg.textContent = "Select a location to see library status.";
+    return;
+  }
+  try {
+    const status = await getLibraryStatus(locId);
+    libraryStatusMsg.textContent = formatLibraryStatus(status);
+    // Auto-poll while building
+    if (status && (status.status === "building" || status.status === "pending")) {
+      startLibraryPoll(locId);
+    } else {
+      stopLibraryPoll();
+    }
+  } catch {
+    libraryStatusMsg.textContent = "Could not load library status.";
+    stopLibraryPoll();
+  }
+}
+
+function startLibraryPoll(locationId: number) {
+  if (libraryPollTimer != null) return;
+  libraryPollTimer = window.setInterval(() => {
+    loadLibraryStatus(locationId);
+  }, 5000);
+}
+
+function stopLibraryPoll() {
+  if (libraryPollTimer != null) {
+    window.clearInterval(libraryPollTimer);
+    libraryPollTimer = null;
+  }
+}
+
+buildLibraryBtn.addEventListener("click", async () => {
+  const locationId = Number(locationSelect.value);
+  if (!locationId) {
+    libraryStatusMsg.textContent = "Select a location before building the library.";
+    return;
+  }
+  buildLibraryBtn.disabled = true;
+  const originalText = buildLibraryBtn.textContent ?? "Build Library";
+  buildLibraryBtn.innerHTML = `<span class="loading-spinner"></span>Starting…`;
+  try {
+    await triggerLibraryBuild(locationId);
+    libraryStatusMsg.textContent = "Build triggered — polling status…";
+    await loadLibraryStatus(locationId);
+  } catch (err) {
+    libraryStatusMsg.textContent = err instanceof Error
+      ? `Failed to trigger build: ${err.message}`
+      : "Failed to trigger build.";
+  } finally {
+    buildLibraryBtn.disabled = false;
+    buildLibraryBtn.textContent = originalText;
+  }
+});
+
+locationSelect.addEventListener("change", () => {
+  stopLibraryPoll();
+  loadLibraryStatus();
 });
 
 // --- Analysis ---
@@ -1253,7 +1345,7 @@ refreshValHistoryBtn.addEventListener("click", () => loadValHistory());
 // --- Boot ---
 
 initHealth();
-initLocations();
+initLocations().then(() => loadLibraryStatus());
 initStations();
 setDefaultDates();
 loadHistory();
