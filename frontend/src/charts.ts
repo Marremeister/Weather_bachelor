@@ -2427,6 +2427,8 @@ const chartByContainerId: Record<string, () => ECharts | null> = {
   "forecast-chart": () => forecastChart,
   "val-timeseries-chart": () => valTimeseriesChart,
   "val-histogram-chart": () => valHistogramChart,
+  "val-twd-timeseries-chart": () => valTwdTimeseriesChart,
+  "val-twd-histogram-chart": () => valTwdHistogramChart,
   "val-monthly-chart": () => valMonthlyChart,
   "val-detail-chart": () => valDetailChart,
 };
@@ -2452,6 +2454,8 @@ function handleResize() {
   forecastChart?.resize();
   valTimeseriesChart?.resize();
   valHistogramChart?.resize();
+  valTwdTimeseriesChart?.resize();
+  valTwdHistogramChart?.resize();
   valMonthlyChart?.resize();
 }
 
