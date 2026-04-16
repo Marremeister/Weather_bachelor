@@ -2059,11 +2059,14 @@ export function renderValDetailForecastChart(
     },
     {
       name: "Mean TWD",
-      type: "scatter",
+      type: "line",
       yAxisIndex: 1,
       data: twdData,
+      symbol: "circle",
       symbolSize: 8,
+      lineStyle: { color: "#e67700", width: 2 },
       itemStyle: { color: "#e67700" },
+      connectNulls: false,
       z: 5,
     },
   ];
@@ -2104,12 +2107,14 @@ export function renderValDetailForecastChart(
     });
     series.push({
       name: "Actual TWD",
-      type: "scatter",
+      type: "line",
       yAxisIndex: 1,
       data: actualTwdData,
       symbolSize: 7,
       symbol: "diamond",
+      lineStyle: { color: "#2b8a3e", width: 2, type: "dashed" },
       itemStyle: { color: "#2b8a3e" },
+      connectNulls: false,
       z: 6,
     });
     legendData.push("Actual TWS", "Actual TWD");
