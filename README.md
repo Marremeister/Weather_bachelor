@@ -89,12 +89,17 @@ GFS and ERA5 are different models with systematic biases. Before comparing a GFS
 
 ## Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
-- A [Copernicus CDS account](https://cds.climate.copernicus.eu/) and API key (required for ERA5 data; optional if using Open-Meteo fallback)
+You need:
 
-## Getting Started
+- [Git](https://git-scm.com/)
+- A [Copernicus CDS account](https://cds.climate.copernicus.eu/) and API key — required for real ERA5 downloads. Without one, the app transparently falls back to the Open-Meteo ERA5 mirror (free, no key, slightly lower quality).
 
-### 1. Clone and configure
+Then, depending on which setup path you pick below:
+
+- **Option A — Docker:** [Docker](https://docs.docker.com/get-docker/) and Docker Compose. Nothing else is needed — Python, Node, PostgreSQL, and the `eccodes` native library all run inside containers.
+- **Option B — Native (no Docker):** Python 3.12+, Node 20+, PostgreSQL 16, and the `eccodes` C library. Full instructions below.
+
+## Clone and configure (required for both paths)
 
 ```bash
 git clone https://github.com/Marremeister/Weather_bachelor.git
@@ -102,19 +107,31 @@ cd Weather_bachelor
 cp .env.example .env
 ```
 
-Edit `.env` to add your CDS API key if you have one:
+Edit `.env` and add your CDS API key if you have one:
 
 ```
 CDSAPI_KEY=your-key-here
 ```
 
-### 2. Start the development environment
+> The default `DATABASE_URL` in `.env.example` is set up for the Docker workflow (hostname `postgres`, port `5432` on the internal Compose network). If you follow **Option B**, you'll change it to point at your local Postgres — see step B.5.
+
+---
+
+## Option A — Setup with Docker (recommended)
+
+The fastest way to get the full stack running. Docker Compose starts PostgreSQL, the backend, and the frontend in a single command.
+
+### A.1. Start everything
+
+From the project root:
 
 ```bash
 docker-compose up
 ```
 
-This starts three services:
+On first run this builds the images, applies Alembic migrations, and seeds the default Los Angeles / San Pedro location and KLAX weather station.
+
+Three services come up:
 
 | Service | URL | Description |
 |---------|-----|-------------|
@@ -122,102 +139,179 @@ This starts three services:
 | Backend API | http://localhost:8001 | FastAPI with auto-reload |
 | PostgreSQL | localhost:5433 | Database |
 
-On first startup, the backend runs Alembic migrations and seeds the default LA/San Pedro location and KLAX weather station.
+### A.2. Open the app
 
-### 3. Build the feature library
+Visit http://localhost:5175 in a browser. Interactive API docs live at http://localhost:8001/docs.
 
-The ERA5 feature library powers the analog matching. You can trigger a library build from the application UI, or the app will fall back to Open-Meteo for historical data if no library is available.
+### A.3. Stopping and resetting
 
-### 4. Run an analysis
+- `Ctrl+C` in the Compose terminal stops the containers.
+- `docker-compose down` removes the containers (keeps the database volume).
+- `docker-compose down -v` removes the containers **and** the database volume — useful for a clean slate.
 
-Open http://localhost:5175 in a browser. Select a location and date, choose Historical or Forecast mode, and click Run Analysis.
+---
 
-### Running the backend without Docker (optional)
+## Option B — Setup without Docker (native)
 
-If you want to run the backend directly on your machine (for example to run tests or debug without Docker), create a Python virtual environment and install the dependencies with pip. Python 3.12 or newer is required.
+Installs PostgreSQL, Python, Node, and the `eccodes` C library directly on your machine. Works on macOS, Linux, and Windows (with a caveat on `eccodes` — see B.2). You'll end up with three processes running: Postgres as a background service, the backend via `uvicorn`, and the frontend via `npm run dev`.
 
-Run every command below **from the project root** (the folder that contains this README). The examples below use `.venv` as the virtual environment directory — it is already listed in `.gitignore`, so it's safe to create it inside the repo.
+### B.1. Install PostgreSQL 16
 
-#### macOS / Linux
+- **macOS:**
+  ```bash
+  brew install postgresql@16
+  brew services start postgresql@16
+  ```
+- **Linux (Debian/Ubuntu):**
+  ```bash
+  sudo apt install postgresql-16
+  sudo systemctl start postgresql
+  ```
+- **Windows:** download and run the installer from [postgresql.org](https://www.postgresql.org/download/windows/). It registers a Windows service that starts automatically.
 
-Open a terminal and run:
+Then create the database and role the app expects:
 
 ```bash
-# 1. Create the virtual environment (only needed the first time)
+psql postgres -c "CREATE USER postgres WITH PASSWORD 'postgres';"   # skip if the user exists
+psql postgres -c "CREATE DATABASE seabreeze OWNER postgres;"
+```
+
+(On Windows, run these commands in the "SQL Shell (psql)" that ships with the installer.)
+
+### B.2. Install the `eccodes` native library
+
+`cfgrib` parses GRIB2 files from GFS and ERA5, but it is a Python wrapper around a C library (`eccodes`) that pip **cannot** install for you.
+
+- **macOS:**
+  ```bash
+  brew install eccodes
+  ```
+- **Linux (Debian/Ubuntu):**
+  ```bash
+  sudo apt install libeccodes-dev
+  ```
+- **Windows:** `eccodes` is finicky on native Windows. The two reliable options:
+  1. **Conda:** install [miniforge](https://github.com/conda-forge/miniforge) and run
+     ```powershell
+     conda install -c conda-forge eccodes
+     ```
+     *before* installing the Python requirements below. You can still use the pip `requirements.txt` for the rest.
+  2. **WSL2:** run everything inside [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) and follow the Linux instructions.
+
+Without `eccodes`, the backend starts fine but any ERA5/GFS GRIB fetch will crash at runtime.
+
+### B.3. Install Node.js (for the frontend)
+
+- **macOS:** `brew install node`
+- **Linux:** `sudo apt install nodejs npm`, or use [nvm](https://github.com/nvm-sh/nvm) for version control.
+- **Windows:** installer from [nodejs.org](https://nodejs.org/) (LTS).
+
+Verify: `node --version` should print 20.x or newer.
+
+### B.4. Create a Python virtual environment and install the backend deps
+
+Run everything below **from the project root**. The `.venv/` directory is already in `.gitignore`, so it's safe to create it inside the repo.
+
+**macOS / Linux** (terminal):
+
+```bash
 python3.12 -m venv .venv
-
-# 2. Activate it (do this every new shell session)
 source .venv/bin/activate
-
-# 3. Upgrade pip, then install dependencies
 pip install --upgrade pip
 pip install -r backend/requirements.txt
-
-# Optional: install the backend as an editable package
-pip install -e backend
-
-# Optional: install test dependencies
-pip install pytest
+pip install pytest          # optional, for running tests
 ```
 
-To leave the venv later, just run `deactivate`.
+If `python3.12` isn't found: install it with `brew install python@3.12` (macOS) or `sudo apt install python3.12 python3.12-venv` (Debian/Ubuntu).
 
-If `python3.12` isn't found, install it with [Homebrew](https://brew.sh/) on macOS (`brew install python@3.12`) or your package manager on Linux (e.g. `sudo apt install python3.12 python3.12-venv` on Debian/Ubuntu).
-
-#### Windows
-
-First, install Python 3.12+ from [python.org](https://www.python.org/downloads/windows/) (check "Add Python to PATH" during install). Then open **PowerShell** in the project root and run:
+**Windows** (PowerShell):
 
 ```powershell
-# 1. Create the virtual environment (only needed the first time)
 py -3.12 -m venv .venv
-
-# 2. Activate it (do this every new shell session)
 .\.venv\Scripts\Activate.ps1
-
-# 3. Upgrade pip, then install dependencies
 pip install --upgrade pip
 pip install -r backend\requirements.txt
-
-# Optional: install the backend as an editable package
-pip install -e backend
-
-# Optional: install test dependencies
 pip install pytest
 ```
 
-If PowerShell blocks the activation script with an execution policy error, run this once (as your user, not admin):
+If PowerShell blocks the activation script, run this once as your user (not admin):
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 
-If you use **cmd.exe** instead of PowerShell, replace step 2 with:
+If you use **cmd.exe** instead of PowerShell, activate with `.venv\Scripts\activate.bat`.
 
-```cmd
-.venv\Scripts\activate.bat
-```
-
-To leave the venv later, run `deactivate`.
-
-#### Confirming it worked
-
-On any platform, you'll know the venv is active when your shell prompt starts with `(.venv)`. You can verify the interpreter and installed packages with:
+You'll know the venv is active when your shell prompt starts with `(.venv)`. To leave it later, run `deactivate`. To confirm it worked:
 
 ```bash
-python --version        # Should report 3.12.x
-pip list                # Should list fastapi, sqlalchemy, numpy, xarray, ...
+python --version        # should report 3.12.x
+pip list                # should list fastapi, sqlalchemy, numpy, xarray, cfgrib, ...
 ```
 
-#### Database
+### B.5. Update `.env` for native Postgres
 
-You will still need a running PostgreSQL instance and a valid `DATABASE_URL` in your environment. The simplest option is to start **only** the `postgres` service from the provided Compose file:
+The default `DATABASE_URL` points at the Docker hostname `postgres`. Edit `.env` to point at your local Postgres:
+
+```
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/seabreeze
+ALLOWED_ORIGINS=http://localhost:5173
+```
+
+`ALLOWED_ORIGINS` must include the URL your frontend dev server runs on. In the native path that's port **5173** (Vite default). In the Docker path it's **5175**.
+
+### B.6. Run database migrations
+
+With the venv active:
 
 ```bash
-docker-compose up postgres
+cd backend
+alembic upgrade head
+cd ..
 ```
 
-and point `DATABASE_URL` at `localhost:5433` (see `.env.example` for the full connection string).
+This creates all tables. The default location and KLAX station get seeded the first time the backend starts.
+
+### B.7. Start the backend
+
+From the project root with the venv active:
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend
+```
+
+The API is now live at http://localhost:8000, with Swagger at http://localhost:8000/docs.
+
+### B.8. Start the frontend (in a second terminal)
+
+```bash
+cd frontend
+npm install                # first time only
+npm run dev                # serves on http://localhost:5173
+```
+
+Open http://localhost:5173. The frontend calls the backend on port 8000 — make sure `ALLOWED_ORIGINS` in `.env` includes that URL (see B.5).
+
+### Tips for the native path
+
+- You now need three things running simultaneously: Postgres (background service), the backend (`uvicorn`), and the frontend (`npm run dev`). Docker Compose is convenient precisely because it manages all three for you.
+- **Ports differ** from the Docker setup:
+  - Native: Postgres 5432, backend 8000, frontend 5173
+  - Docker: Postgres 5433, backend 8001, frontend 5175
+  - Make sure your `.env` and any bookmarks match the path you chose.
+- **Hybrid option:** if you don't want to install Postgres natively, you can still use the Compose Postgres service and run only the backend/frontend locally. Start it with `docker-compose up postgres` and point `DATABASE_URL` at `localhost:5433`.
+
+---
+
+## After either setup path
+
+### Build the feature library
+
+The ERA5 feature library powers the analog matching. You can trigger a library build from the application UI. If no library is available yet, the app falls back to Open-Meteo for historical data.
+
+### Run an analysis
+
+In your browser, open the frontend URL (5175 for Docker, 5173 for native). Select a location and date, choose Historical or Forecast mode, and click **Run Analysis**.
 
 ## Project Structure
 
