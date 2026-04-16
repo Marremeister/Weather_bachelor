@@ -132,6 +132,23 @@ The ERA5 feature library powers the analog matching. You can trigger a library b
 
 Open http://localhost:5175 in a browser. Select a location and date, choose Historical or Forecast mode, and click Run Analysis.
 
+### Running the backend without Docker (optional)
+
+If you want to run the backend directly on your machine (for example to run tests or debug without Docker), install the Python dependencies with pip:
+
+```bash
+# From the project root, with Python 3.12+ and a virtualenv active:
+pip install -r backend/requirements.txt
+
+# Or equivalently, install the backend as an editable package:
+pip install -e backend
+
+# For development (tests):
+pip install pytest
+```
+
+You will still need a running PostgreSQL instance and a valid `DATABASE_URL` in your environment. The simplest way is to keep just the `postgres` service from `docker-compose.yml` running and point `DATABASE_URL` at `localhost:5433`.
+
 ## Project Structure
 
 ```
