@@ -30,7 +30,13 @@ logger = logging.getLogger(__name__)
 
 
 _LIVE_ONLY_SOURCES = frozenset({"gfs", "gfs_open_meteo", "open_meteo_forecast"})
-"""Sources that use live/forecast-only endpoints and cannot serve historical dates."""
+"""Sources that use live/forecast-only endpoints and cannot serve historical dates.
+
+``gfs_hindcast`` is intentionally *not* listed here: it can serve
+historical dates (it's a forecast-hour archive) and in principle could be
+calibrated against ERA5, but its ``(gfs_hindcast, era5)`` bias pair has
+no consumers yet and is out of scope for the initial hindcast library.
+Calibration for that pair is a separate follow-up."""
 
 
 def calibrate_bias(

@@ -33,6 +33,9 @@ def get_provider(source_name: str) -> WeatherProvider:
     if source_name == "gfs":
         from app.services.gfs_forecast_provider import GfsForecastProvider
         return GfsForecastProvider()
+    if source_name == "gfs_hindcast":
+        from app.services.gfs_hindcast_provider import GfsHindcastProvider
+        return GfsHindcastProvider()
     if source_name == "gfs_open_meteo":
         from app.services.gfs_open_meteo_provider import GfsOpenMeteoProvider
         return GfsOpenMeteoProvider()
@@ -57,10 +60,11 @@ def _expected_hours(start: date, end: date, source: str = "") -> int:
     """Expected record count for a date range.
 
     Open-Meteo sources provide 24 hourly records per day.
-    GFS provides one record per analysis-window hour (default 9/day).
+    GFS (live and hindcast) provide one record per analysis-window hour
+    (default 9/day).
     """
     days = (end - start).days + 1
-    if source == "gfs":
+    if source in ("gfs", "gfs_hindcast"):
         hours_per_day = (
             settings.gfs_analysis_local_end
             - settings.gfs_analysis_local_start

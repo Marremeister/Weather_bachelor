@@ -40,12 +40,21 @@ def trigger_library_build(
 @router.get("/status")
 def library_status(
     location_id: int = Query(...),
+    source: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
-    """Check build progress for a location."""
-    info = get_library_status(db, location_id)
+    """Check build progress for a location.
+
+    When *source* is provided, the response reflects the latest build job
+    for that specific source (e.g. ``era5`` or ``gfs_hindcast``); otherwise
+    the latest job across all sources is returned (legacy behaviour).
+    """
+    info = get_library_status(db, location_id, source=source)
     if info is None:
-        return {"status": "no_build", "location_id": location_id}
+        payload: dict = {"status": "no_build", "location_id": location_id}
+        if source is not None:
+            payload["source"] = source
+        return payload
     return info
 
 

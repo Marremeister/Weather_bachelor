@@ -38,6 +38,19 @@ class Settings(BaseSettings):
     gfs_download_timeout: int = 180
     gfs_fallback_to_open_meteo: bool = True
 
+    # GFS hindcast settings (NCAR RDA THREDDS NCSS point subsetting)
+    gfs_hindcast_start_year: int = 2016
+    gfs_hindcast_end_year: int = 2024
+    gfs_hindcast_months: str = "05,06,07,08,09"
+    gfs_hindcast_ncss_max_workers: int = 8
+    gfs_hindcast_ncss_max_retries: int = 5
+    gfs_hindcast_ncss_timeout: int = 60
+    gfs_hindcast_chunk_months: int = 1  # one month per build chunk
+
+    @property
+    def gfs_hindcast_months_list(self) -> list[int]:
+        return [int(m.strip()) for m in self.gfs_hindcast_months.split(",")]
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     @field_validator("database_url")

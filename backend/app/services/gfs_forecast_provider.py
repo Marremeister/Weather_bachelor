@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 import requests
 
 from app.config import settings
+from app.services.gfs_common import forecast_hours_for_window
 from app.services.gfs_grib_utils import (
     _open_target_da,
     select_point_dataarray,
@@ -66,33 +67,9 @@ def _latest_available_cycle(now_utc: datetime) -> tuple[datetime, int]:
     return yesterday, 0
 
 
-def _forecast_hours_for_window(
-    model_run_time: datetime,
-    target_date: date,
-    timezone: str,
-    local_start: int,
-    local_end: int,
-) -> list[int]:
-    """Compute the GFS forecast hours (offsets from model_run_time)
-    whose valid times land in [local_start, local_end] on target_date.
-
-    Returns sorted list of integer forecast hours (e.g. [15, 16, ..., 23]).
-    """
-    tz = ZoneInfo(timezone)
-    utc = ZoneInfo("UTC")
-
-    hours: list[int] = []
-    for local_hour in range(local_start, local_end + 1):
-        local_dt = datetime(
-            target_date.year, target_date.month, target_date.day,
-            local_hour, 0, 0, tzinfo=tz,
-        )
-        utc_dt = local_dt.astimezone(utc)
-        fhour = int((utc_dt - model_run_time).total_seconds() / 3600)
-        if fhour >= 0:
-            hours.append(fhour)
-
-    return sorted(hours)
+# Backward-compatible alias for callers importing this symbol from the
+# live-forecast module.  The implementation now lives in gfs_common.
+_forecast_hours_for_window = forecast_hours_for_window
 
 
 class GfsForecastProvider(WeatherProvider):

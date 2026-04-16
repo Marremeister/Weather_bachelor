@@ -138,10 +138,14 @@ export async function triggerLibraryBuild(
 
 export async function getLibraryStatus(
   locationId: number,
+  source?: string,
 ): Promise<LibraryStatusResponse> {
   const params = new URLSearchParams({
     location_id: String(locationId),
   });
+  if (source) {
+    params.set("source", source);
+  }
   const res = await fetch(`/api/library/status?${params}`);
   if (!res.ok) {
     throw new Error(`Library status fetch failed: ${res.status}`);

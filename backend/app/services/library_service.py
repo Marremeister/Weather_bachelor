@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -32,22 +32,134 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------
 
 
+def _date_range_for_source(source: str) -> tuple[int, int, list[int], int]:
+    """Return ``(start_year, end_year, months, chunk_months)`` for *source*.
+
+    ``chunk_months`` controls how finely the season is sliced by
+    :func:`_season_date_chunks`.  ERA5 builds are coarse (one chunk per
+    season/year) because the CDS API prefers large requests; GFS
+    hindcast builds are fine (one chunk per month) so partial failures
+    are isolated and resume cost stays low.
+    """
+    if source == "era5":
+        return (
+            settings.era5_start_year,
+            settings.era5_end_year,
+            settings.era5_months_list,
+            12,  # effectively one chunk per year (covers all configured months)
+        )
+    if source == "gfs_hindcast":
+        return (
+            settings.gfs_hindcast_start_year,
+            settings.gfs_hindcast_end_year,
+            settings.gfs_hindcast_months_list,
+            settings.gfs_hindcast_chunk_months,
+        )
+    raise ValueError(f"No library date range configured for source {source!r}")
+
+
+def _month_range(year: int, month: int) -> tuple[date, date]:
+    start = date(year, month, 1)
+    if month == 12:
+        end = date(year, 12, 31)
+    else:
+        end = date(year, month + 1, 1) - timedelta(days=1)
+    return start, end
+
+
 def _season_date_chunks(
-    start_year: int, end_year: int, months: list[int]
+    start_year: int,
+    end_year: int,
+    months: list[int],
+    chunk_months: int = 12,
 ) -> list[tuple[date, date]]:
-    """Return per-year (start, end) pairs covering the given months."""
+    """Return ``(start, end)`` pairs covering the configured season.
+
+    When ``chunk_months`` is 12 (or any value ≥ ``len(months)``) the
+    helper emits one chunk per year spanning the full configured
+    season — historical behaviour.  Smaller values slice the season
+    into consecutive ``chunk_months``-month groups so long builds can
+    progress/fail incrementally.
+    """
+    if not months:
+        return []
+
+    ordered = sorted(months)
     chunks: list[tuple[date, date]] = []
+
     for year in range(start_year, end_year + 1):
-        first_month = min(months)
-        last_month = max(months)
-        chunk_start = date(year, first_month, 1)
-        # Last day of last_month
-        if last_month == 12:
-            chunk_end = date(year, 12, 31)
-        else:
-            chunk_end = date(year, last_month + 1, 1) - __import__("datetime").timedelta(days=1)
-        chunks.append((chunk_start, chunk_end))
+        if chunk_months >= len(ordered):
+            chunk_start, _ = _month_range(year, ordered[0])
+            _, chunk_end = _month_range(year, ordered[-1])
+            chunks.append((chunk_start, chunk_end))
+            continue
+
+        # Group consecutive months into buckets of size `chunk_months`.
+        for i in range(0, len(ordered), chunk_months):
+            bucket = ordered[i : i + chunk_months]
+            chunk_start, _ = _month_range(year, bucket[0])
+            _, chunk_end = _month_range(year, bucket[-1])
+            chunks.append((chunk_start, chunk_end))
+
     return chunks
+
+
+def _days_already_built(
+    db: Session,
+    location_id: int,
+    source: str,
+    config_hash: str,
+    start: date,
+    end: date,
+) -> set[date]:
+    """Return the set of dates already present in ``daily_features`` for
+    the given source+hash.  Used by the resume guard so a restarted
+    build skips work it has already persisted."""
+    rows = db.execute(
+        select(DailyFeatureRow.date)
+        .where(
+            DailyFeatureRow.location_id == location_id,
+            DailyFeatureRow.source == source,
+            DailyFeatureRow.feature_config_hash == config_hash,
+            DailyFeatureRow.date >= start,
+            DailyFeatureRow.date <= end,
+        )
+    ).scalars().all()
+    return set(rows)
+
+
+def _warn_on_hash_mismatch(
+    db: Session,
+    location_id: int,
+    source: str,
+    config_hash: str,
+) -> None:
+    """Log a warning if any *other* source has daily_features rows using a
+    different feature_config_hash.  Non-fatal — divergent analysis
+    windows between sources are legitimate — but worth surfacing."""
+    other_hashes = (
+        db.execute(
+            select(DailyFeatureRow.source, DailyFeatureRow.feature_config_hash)
+            .where(
+                DailyFeatureRow.location_id == location_id,
+                DailyFeatureRow.source != source,
+            )
+            .distinct()
+        )
+        .all()
+    )
+    mismatched = [
+        (src, h) for (src, h) in other_hashes if h != config_hash
+    ]
+    if mismatched:
+        logger.warning(
+            "Library build (%s): other sources use a different "
+            "feature_config_hash — rebuild may be needed if configs "
+            "should stay aligned: %s (current hash=%s)",
+            source,
+            mismatched,
+            config_hash,
+        )
 
 
 # ------------------------------------------------------------------
@@ -68,8 +180,15 @@ def build_feature_library(
         window = AnalysisWindow()
 
     config_hash = compute_feature_config_hash(window)
-    months = settings.era5_months_list
-    chunks = _season_date_chunks(settings.era5_start_year, settings.era5_end_year, months)
+    try:
+        start_year, end_year, months, chunk_months = _date_range_for_source(source)
+    except ValueError:
+        logger.error(
+            "Library build: no date range configured for source %r", source
+        )
+        return
+
+    chunks = _season_date_chunks(start_year, end_year, months, chunk_months)
 
     db: Session = SessionLocal()
     try:
@@ -77,6 +196,8 @@ def build_feature_library(
         if location is None:
             logger.error("Library build: location %d not found", location_id)
             return
+
+        _warn_on_hash_mismatch(db, location_id, source, config_hash)
 
         job = LibraryBuildJob(
             location_id=location_id,
@@ -95,6 +216,23 @@ def build_feature_library(
 
         for idx, (chunk_start, chunk_end) in enumerate(chunks):
             try:
+                # Resume guard: if every day in this chunk is already
+                # persisted with the current feature_config_hash, skip
+                # the network fetch + recomputation entirely.
+                built = _days_already_built(
+                    db, location_id, source, config_hash, chunk_start, chunk_end
+                )
+                total_days = (chunk_end - chunk_start).days + 1
+                if len(built) >= total_days:
+                    logger.info(
+                        "Library build chunk %d/%d already complete (%s to %s),"
+                        " skipping",
+                        idx + 1, len(chunks), chunk_start, chunk_end,
+                    )
+                    job.completed_chunks = idx + 1
+                    db.commit()
+                    continue
+
                 # 1. Fetch weather data into Postgres
                 fetch_weather(db, provider, location, chunk_start, chunk_end)
 
@@ -118,10 +256,13 @@ def build_feature_library(
                     .all()
                 )
 
-                # 3. Group by date
+                # 3. Group by date, skip days already built
                 by_date: dict[date, list] = defaultdict(list)
                 for rec in records:
-                    by_date[rec.valid_time_local.date()].append(rec)
+                    day = rec.valid_time_local.date()
+                    if day in built:
+                        continue
+                    by_date[day].append(rec)
 
                 # 4. Compute features and upsert
                 rows = []
@@ -195,14 +336,34 @@ def build_feature_library(
 # ------------------------------------------------------------------
 
 
-def get_library_status(db: Session, location_id: int) -> dict | None:
-    """Return the most recent library build job info for a location."""
-    job = db.execute(
+def get_library_status(
+    db: Session,
+    location_id: int,
+    source: str | None = None,
+) -> dict | None:
+    """Return the most recent library build job info for a location.
+
+    When *source* is provided, only jobs for that source are considered;
+    otherwise the latest job across all sources is returned (preserving
+    the original behaviour for callers that don't care about source).
+    """
+    stmt = (
         select(LibraryBuildJob)
         .where(LibraryBuildJob.location_id == location_id)
         .order_by(LibraryBuildJob.id.desc())
         .limit(1)
-    ).scalar_one_or_none()
+    )
+    if source is not None:
+        stmt = (
+            select(LibraryBuildJob)
+            .where(
+                LibraryBuildJob.location_id == location_id,
+                LibraryBuildJob.source == source,
+            )
+            .order_by(LibraryBuildJob.id.desc())
+            .limit(1)
+        )
+    job = db.execute(stmt).scalar_one_or_none()
 
     if job is None:
         return None
