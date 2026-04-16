@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.database import SessionLocal
+from app.middleware.basic_auth import BasicAuthMiddleware
 from app.models.location import Location
 from app.models.weather_station import WeatherStation
 from app.routers import analysis, classification, library, locations, observations, validation, weather
@@ -72,6 +73,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Site-wide HTTP Basic Auth gate. Added AFTER CORS so it runs FIRST on inbound
+# requests (Starlette applies middleware in LIFO order). No-op when
+# settings.site_password is empty (local dev default).
+app.add_middleware(BasicAuthMiddleware)
 
 app.include_router(locations.router)
 app.include_router(weather.router)

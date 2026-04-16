@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     default_timezone: str = "America/Los_Angeles"
     allowed_origins: str = "http://localhost:5173,http://localhost:5174,http://localhost:5175"
 
+    # Site protection (HTTP Basic Auth). If empty, auth is disabled (dev mode convenience).
+    site_password: str = ""
+
     # ERA5 / CDS settings
     cdsapi_url: str = "https://cds.climate.copernicus.eu/api"
     cdsapi_key: str = ""
