@@ -23,7 +23,7 @@ import {
   triggerBatchValidation,
   triggerLibraryBuild,
 } from "./api";
-import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart, disposeForecastChart, renderValidationTimeSeriesChart, renderValidationHistogramChart, renderValidationMonthlyChart, disposeValidationCharts, renderValDetailForecastChart, disposeValDetailChart, resizeChartById } from "./charts";
+import { renderWindOverlayChart, renderTempPressureChart, renderDualWindRose, renderBiasChart, renderAnalogOverlayChart, renderWindSpeedIncreaseChart, renderFeatureRadarChart, renderDirectionShiftChart, renderSeasonalHeatmapChart, renderDistanceHistogramChart, renderForecastChart, disposeForecastChart, renderValidationTimeSeriesChart, renderValidationHistogramChart, renderValidationTWDTimeSeriesChart, renderValidationTWDHistogramChart, renderValidationMonthlyChart, disposeValidationCharts, renderValDetailForecastChart, disposeValDetailChart, resizeChartById } from "./charts";
 import { TabController } from "./tabs";
 import { ExportMenu } from "./export-menu";
 import {
@@ -194,7 +194,9 @@ const PANEL_CHART_IDS: Record<string, string[]> = {
     "bias-chart",
   ],
   validation: [
-    "val-timeseries-chart", "val-histogram-chart", "val-monthly-chart",
+    "val-timeseries-chart", "val-histogram-chart",
+    "val-twd-timeseries-chart", "val-twd-histogram-chart",
+    "val-monthly-chart",
   ],
 };
 
@@ -1046,6 +1048,8 @@ const valGateTable = document.getElementById("val-gate-table")!;
 const valSourceTable = document.getElementById("val-source-table")!;
 const valTimeseriesChartEl = document.getElementById("val-timeseries-chart")!;
 const valHistogramChartEl = document.getElementById("val-histogram-chart")!;
+const valTwdTimeseriesChartEl = document.getElementById("val-twd-timeseries-chart")!;
+const valTwdHistogramChartEl = document.getElementById("val-twd-histogram-chart")!;
 const valMonthlyChartEl = document.getElementById("val-monthly-chart")!;
 const valHistoryList = document.getElementById("val-history-list")!;
 const refreshValHistoryBtn = document.getElementById("refresh-val-history-btn") as HTMLButtonElement;
@@ -1249,6 +1253,8 @@ function renderValResults(result: ValidationRunResult) {
   if (result.per_day_results && result.per_day_results.length > 0) {
     renderValidationTimeSeriesChart(valTimeseriesChartEl, result.per_day_results, drillDownToValDay);
     renderValidationHistogramChart(valHistogramChartEl, result.per_day_results);
+    renderValidationTWDTimeSeriesChart(valTwdTimeseriesChartEl, result.per_day_results, drillDownToValDay);
+    renderValidationTWDHistogramChart(valTwdHistogramChartEl, result.per_day_results);
     renderValidationMonthlyChart(valMonthlyChartEl, result.per_day_results);
     renderValPerDayTable(valPerDayTable, result.per_day_results);
   } else {

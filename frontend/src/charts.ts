@@ -53,6 +53,8 @@ let distanceHistogramChart: ECharts | null = null;
 let forecastChart: ECharts | null = null;
 let valTimeseriesChart: ECharts | null = null;
 let valHistogramChart: ECharts | null = null;
+let valTwdTimeseriesChart: ECharts | null = null;
+let valTwdHistogramChart: ECharts | null = null;
 let valMonthlyChart: ECharts | null = null;
 let valDetailChart: ECharts | null = null;
 
@@ -1673,6 +1675,12 @@ function maeColor(mae: number): string {
   return "#e03131";
 }
 
+function twdMaeColor(mae: number): string {
+  if (mae <= 15) return "#40c057";
+  if (mae <= 30) return "#fd7e14";
+  return "#e03131";
+}
+
 export function renderValidationTimeSeriesChart(
   container: HTMLElement,
   perDayResults: Record<string, unknown>[],
@@ -1894,6 +1902,216 @@ export function getValHistogramChart(): ECharts | null {
   return valHistogramChart;
 }
 
+export function renderValidationTWDTimeSeriesChart(
+  container: HTMLElement,
+  perDayResults: Record<string, unknown>[],
+  onDayClick?: (date: string) => void,
+): void {
+  if (valTwdTimeseriesChart) valTwdTimeseriesChart.dispose();
+
+  const rows = perDayResults
+    .filter((r) => r.twd_circular_mae != null)
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+  if (rows.length === 0) return;
+
+  valTwdTimeseriesChart = init(container);
+
+  const dates = rows.map((r) => String(r.date));
+  const maes = rows.map((r) => Number(r.twd_circular_mae));
+
+  const scatterData = maes.map((v, i) => ({
+    value: [dates[i], v],
+    itemStyle: { color: twdMaeColor(v) },
+  }));
+
+  const rollingAvg: (number | null)[] = [];
+  for (let i = 0; i < maes.length; i++) {
+    if (i < 6) {
+      rollingAvg.push(null);
+    } else {
+      let sum = 0;
+      for (let j = i - 6; j <= i; j++) sum += maes[j];
+      rollingAvg.push(sum / 7);
+    }
+  }
+
+  const overallMean = maes.reduce((s, v) => s + v, 0) / maes.length;
+
+  valTwdTimeseriesChart.setOption({
+    tooltip: {
+      trigger: "axis",
+      formatter(params: unknown) {
+        const items = params as Array<{ seriesName: string; value: [string, number]; marker: string }>;
+        if (!items.length) return "";
+        let html = `${items[0].value[0]}<br/>`;
+        for (const it of items) {
+          if (it.value[1] != null) {
+            html += `${it.marker} ${it.seriesName}: ${Number(it.value[1]).toFixed(1)}°<br/>`;
+          }
+        }
+        return html;
+      },
+    },
+    grid: { left: 60, right: 30, top: 30, bottom: 60 },
+    xAxis: {
+      type: "category",
+      data: dates,
+      axisLabel: { rotate: 45, fontSize: 10 },
+    },
+    yAxis: {
+      type: "value",
+      name: "TWD Circular MAE (°)",
+      nameLocation: "middle",
+      nameGap: 40,
+    },
+    series: [
+      {
+        name: "Circular MAE",
+        type: "scatter",
+        data: scatterData,
+        symbolSize: 6,
+      },
+      {
+        name: "7-day Avg",
+        type: "line",
+        data: rollingAvg.map((v, i) => [dates[i], v]),
+        smooth: true,
+        symbol: "none",
+        lineStyle: { color: "#228be6", width: 2 },
+        itemStyle: { color: "#228be6" },
+        markLine: {
+          silent: true,
+          symbol: "none",
+          data: [
+            {
+              yAxis: overallMean,
+              label: { formatter: `Mean: ${overallMean.toFixed(1)}°`, position: "insideEndTop", fontSize: 10 },
+              lineStyle: { color: "#868e96", type: "dashed" as const, width: 1 },
+            },
+          ],
+        },
+      },
+    ],
+  });
+
+  if (onDayClick) {
+    valTwdTimeseriesChart.on("click", (params) => {
+      if (params.seriesType === "scatter" && params.value) {
+        const val = params.value as (string | number)[];
+        onDayClick(String(val[0]));
+      }
+    });
+  }
+}
+
+export function renderValidationTWDHistogramChart(
+  container: HTMLElement,
+  perDayResults: Record<string, unknown>[],
+): void {
+  if (valTwdHistogramChart) valTwdHistogramChart.dispose();
+
+  const maes = perDayResults
+    .filter((r) => r.twd_circular_mae != null)
+    .map((r) => Number(r.twd_circular_mae));
+
+  if (maes.length === 0) return;
+
+  valTwdHistogramChart = init(container);
+
+  const maeMin = Math.min(...maes);
+  const maeMax = Math.max(...maes);
+  const binCount = Math.min(40, Math.max(10, Math.ceil(Math.sqrt(maes.length))));
+  const binWidth = (maeMax - maeMin) / binCount || 1;
+
+  interface Bin { start: number; end: number; count: number; }
+  const bins: Bin[] = [];
+  for (let i = 0; i < binCount; i++) {
+    bins.push({ start: maeMin + i * binWidth, end: maeMin + (i + 1) * binWidth, count: 0 });
+  }
+
+  for (const v of maes) {
+    let idx = Math.floor((v - maeMin) / binWidth);
+    if (idx >= binCount) idx = binCount - 1;
+    if (idx < 0) idx = 0;
+    bins[idx].count++;
+  }
+
+  const labels = bins.map((b) => b.start.toFixed(1));
+  const barData = bins.map((b) => {
+    const mid = (b.start + b.end) / 2;
+    return {
+      value: b.count,
+      itemStyle: { color: twdMaeColor(mid) },
+    };
+  });
+
+  const mean = maes.reduce((s, v) => s + v, 0) / maes.length;
+  const sorted = [...maes].sort((a, b) => a - b);
+  const median = sorted.length % 2 === 0
+    ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+    : sorted[Math.floor(sorted.length / 2)];
+
+  const meanBinIdx = Math.min(Math.floor((mean - maeMin) / binWidth), binCount - 1);
+  const medianBinIdx = Math.min(Math.floor((median - maeMin) / binWidth), binCount - 1);
+
+  valTwdHistogramChart.setOption({
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter(params: unknown) {
+        const items = params as Array<{ axisValueLabel: string; value: number }>;
+        if (!items.length) return "";
+        const item = items[0];
+        const binIdx = labels.indexOf(item.axisValueLabel);
+        const bin = binIdx >= 0 ? bins[binIdx] : null;
+        const pct = ((item.value / maes.length) * 100).toFixed(1);
+        let html = `Circular MAE: ${item.axisValueLabel}–${bin ? bin.end.toFixed(1) : "?"}°<br/>`;
+        html += `Count: ${item.value} (${pct}%)`;
+        return html;
+      },
+    },
+    grid: { left: 60, right: 30, top: 40, bottom: 60 },
+    xAxis: {
+      type: "category",
+      data: labels,
+      name: "TWD Circular MAE (°)",
+      nameLocation: "middle",
+      nameGap: 35,
+      axisLabel: { rotate: 45, fontSize: 10 },
+    },
+    yAxis: {
+      type: "value",
+      name: "Count",
+      nameLocation: "middle",
+      nameGap: 40,
+    },
+    series: [
+      {
+        type: "bar",
+        data: barData,
+        barWidth: "90%",
+        markLine: {
+          silent: true,
+          symbol: "none",
+          data: [
+            {
+              xAxis: labels[meanBinIdx],
+              label: { formatter: `Mean: ${mean.toFixed(1)}°`, fontSize: 10, position: "end" as const },
+              lineStyle: { color: "#228be6", type: "dashed" as const, width: 1 },
+            },
+            {
+              xAxis: labels[medianBinIdx],
+              label: { formatter: `Median: ${median.toFixed(1)}°`, fontSize: 10, position: "end" as const },
+              lineStyle: { color: "#be4bdb", type: "dashed" as const, width: 1 },
+            },
+          ],
+        },
+      },
+    ],
+  });
+}
+
 export function renderValidationMonthlyChart(
   container: HTMLElement,
   perDayResults: Record<string, unknown>[],
@@ -1977,6 +2195,8 @@ export function getValMonthlyChart(): ECharts | null {
 export function disposeValidationCharts(): void {
   if (valTimeseriesChart) { valTimeseriesChart.dispose(); valTimeseriesChart = null; }
   if (valHistogramChart) { valHistogramChart.dispose(); valHistogramChart = null; }
+  if (valTwdTimeseriesChart) { valTwdTimeseriesChart.dispose(); valTwdTimeseriesChart = null; }
+  if (valTwdHistogramChart) { valTwdHistogramChart.dispose(); valTwdHistogramChart = null; }
   if (valMonthlyChart) { valMonthlyChart.dispose(); valMonthlyChart = null; }
 }
 
